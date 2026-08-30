@@ -1,0 +1,86 @@
+# -------------------------------------------------------
+# Professional .gitignore for C++ CMake project
+# -------------------------------------------------------
+
+# --------------------
+# Build directories
+# --------------------
+build/
+cmake-build-*/
+
+# --------------------
+# CMake files
+# --------------------
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeLists.txt.user
+
+# --------------------
+# Testing
+# --------------------
+Testing/
+
+# --------------------
+# IDE / Editor
+# --------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.#*
+
+# --------------------
+# Cache and runtime
+# --------------------
+.cache/
+*.cache
+
+# --------------------
+# OS generated files
+# --------------------
+.DS_Store
+.DocumentRevisions-V100
+.AppleDouble
+.LM_01/
+
+# --------------------
+# Compiled artifacts
+# --------------------
+*.exe
+*.out
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.orig
+
+# --------------------
+# Compile commands (if not tracked)
+# --------------------
+compile_commands.json
+
+# --------------------
+# Modules
+# --------------------
+*.mod
+*.smod
+
+# --------------------
+# External dependencies (if any)
+# --------------------
+.deps/
+_deps/
+
+# --------------------
+# Notes
+# --------------------
+# CMakePresets.json is intentionally TRACKED. It is the build system: the
+# compiler identities, sanitizer settings and warning flags that every golden
+# hash depends on live in it. Ignoring it means two machines cannot reproduce
+# each other's build, which is the one property this project cannot lose.
+#
+# compile_commands.json is ignored because CMake regenerates it per-preset;
+# .clangd points at build/debug/.

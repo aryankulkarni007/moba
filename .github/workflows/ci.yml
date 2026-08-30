@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Every preset must build and every test must pass. The gcc job is not
+  # redundant with the clang jobs: cross-compiler agreement IS the determinism
+  # test, and on macOS /usr/bin/g++ is Apple Clang, so Linux CI is where that
+  # check actually happens today.
+  build:
+    name: ${{ matrix.preset }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - preset: debug
+            packages: clang-18
+            cxx: clang++-18
+          - preset: release
+            packages: clang-18
+            cxx: clang++-18
+          - preset: release-san
+            packages: clang-18
+            cxx: clang++-18
+          - preset: gcc-release
+            packages: g++-14
+            cxx: g++-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ${{ matrix.packages }}
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  # TODO: The job that actually matters, once the golden hash test exists.
+  #
+  # Building three presets green proves the code compiles three ways. It does
+  # not prove they agree. This job must:
+  #   - run the golden-hash test binary under each preset
+  #   - capture the hash it prints
+  #   - fail if the three values are not byte-identical
+  #
+  # That is the phase 0 exit criterion, and it cannot be expressed as "ctest
+  # passed" in three separate jobs -- each job would be checking against its
+  # own committed constant, which is exactly the failure this is meant to
+  # catch. The comparison has to happen in one place, across artefacts.
+  #
+  # determinism:
+  #   needs: build
+  #   ...

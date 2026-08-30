@@ -1,0 +1,107 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "MOBA_BUILD_TESTS": "ON",
+        "MOBA_WERROR": "ON"
+      }
+    },
+
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug (clang, ASan + UBSan, hardened stdlib)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "MOBA_EXPECT_COMPILER_ID": "Clang",
+        "MOBA_SANITIZE": "ON"
+      }
+    },
+
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release (clang) - golden hash reference",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "MOBA_EXPECT_COMPILER_ID": "Clang",
+        "MOBA_SANITIZE": "OFF"
+      }
+    },
+
+    {
+      "name": "release-san",
+      "inherits": "base",
+      "displayName": "RelWithDebInfo (clang, ASan + UBSan) - optimised sanitizer run",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "MOBA_EXPECT_COMPILER_ID": "Clang",
+        "MOBA_SANITIZE": "ON"
+      }
+    },
+
+    {
+      "name": "gcc-release",
+      "inherits": "base",
+      "displayName": "Release (GCC) - the cross-compiler determinism check",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "g++-16",
+        "MOBA_EXPECT_COMPILER_ID": "GNU",
+        "MOBA_SANITIZE": "OFF"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "debug",       "configurePreset": "debug" },
+    { "name": "release",     "configurePreset": "release" },
+    { "name": "release-san", "configurePreset": "release-san" },
+    { "name": "gcc-release", "configurePreset": "gcc-release" }
+  ],
+
+  "testPresets": [
+    {
+      "name": "sanitized",
+      "hidden": true,
+      "environment": {
+        "ASAN_OPTIONS": "detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1:strict_init_order=1:abort_on_error=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+      }
+    },
+
+    {
+      "name": "debug",
+      "inherits": "sanitized",
+      "configurePreset": "debug",
+      "output": { "outputOnFailure": true },
+      "execution": { "stopOnFailure": false }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release-san",
+      "inherits": "sanitized",
+      "configurePreset": "release-san",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "gcc-release",
+      "configurePreset": "gcc-release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
