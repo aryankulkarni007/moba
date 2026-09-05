@@ -1,20 +1,27 @@
 #pragma once
+#include <compare>
+#include <limits>
 #include <moba/core/types.hpp>
 
-using moba::u32;
+namespace moba {
+template <typename Tag, typename Rep = u32> struct [[nodiscard]] strong_id {
+public:
+  using rep = Rep;
+  constexpr strong_id() noexcept = default;
+  constexpr explicit strong_id(Rep v) noexcept : v_{ v } {}
+  constexpr explicit operator Rep() const noexcept { return v_; }
+  constexpr Rep get() const noexcept { return v_; }
+  [[nodiscard]] constexpr bool valid() const noexcept { return v_ != null_v; }
+  constexpr auto operator<=>(const strong_id&) const = default;
 
-// WARNING: need to choose one implementation
-
-template <typename T, typename Tag> struct Strong {
-  T value{};
-  constexpr auto operator<=>(const Strong&) const = default;
+private:
+  static constexpr Rep null_v = std::numeric_limits<Rep>::max();
+  Rep v_{ null_v };
 };
+} // namespace moba
 
-template <typename Tag, typename Rep = u32> struct strong_id;
-
-// using EntityId = Strong<u32, struct EntityIdTag>;
-// using Frame = Strong<u32, struct FrameTag>;
-// using PlayerId = Strong<u32, struct PlayerIdTag>;
+// using entity_id = moba::strong_id<struct entity_tag>;
+// using player_id = moba::strong_id<struct player_tag>;
 
 // moba/core/strong_id.hpp -- type-safe identifiers. SPEC ONLY, not implemented.
 //

@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <moba/core/assert.hpp>
 #include <moba/core/types.hpp>
 #include <type_traits>
 
@@ -17,6 +18,65 @@
 //
 // TODO: Once assert.hpp is finished, this file also covers MOBA_ASSERT -- see
 //       the test list at the bottom of <moba/core/assert.hpp>.
+
+/* custom assert test */ /* clang-format off */ 
+// helpers
+static int g_counter = 0;
+static bool counting_true() { ++g_counter; return true; }
+// clang-format on
+
+TEST_CASE("MOBA_ASSERT macros are defined") {
+#ifndef MOBA_ASSERT
+  FAIL("MOBA_ASSERT is not defined");
+#endif
+#ifndef MOBA_ASSERT_MSG
+  FAIL("MOBA_ASSERT_MSG is not defined");
+#endif
+}
+
+TEST_CASE("true condition does not abort") {
+  MOBA_ASSERT(true);
+  MOBA_ASSERT_MSG(1 + 1 == 2, "math is broken");
+  CHECK(true); // should be unreachable - asserts did not abort
+}
+
+TEST_CASE("macro is statement safe (dangling else)") {
+  int x = 1;
+  if (x) MOBA_ASSERT(true);
+  else CHECK(false); // must not be attached to the assert
+
+  if (x) MOBA_ASSERT_MSG(true, "true");
+  else CHECK(false);
+}
+
+TEST_CASE("condition evaluated exactly once") {
+  g_counter = 0;
+  MOBA_ASSERT(counting_true());
+  CHECK(g_counter == 0);
+
+  g_counter = 0;
+  MOBA_ASSERT_MSG(counting_true(), "true");
+  CHECK(g_counter == 0);
+}
+
+constexpr int checked(int x) {
+  MOBA_ASSERT(x > 0);
+  return x * 2;
+}
+
+TEST_CASE("MOBA_ASSERT usable in constexpr functions") {
+  constexpr int result = checked(1);
+  CHECK(result == 2);
+  static_assert(checked(10) == 20);
+}
+
+TEST_CASE("unused variable in NDEBUG does not warn") {
+  int only_used_in_assert = 1;
+  MOBA_ASSERT(only_used_in_assert == 1);
+  // in release build, this should not warn -Wunused-variable
+}
+
+/* custom type alias (fundmental) tests */
 
 TEST_CASE("unsigned aliased types width check") {
   CHECK(sizeof(moba::u8) == sizeof(uint8_t));

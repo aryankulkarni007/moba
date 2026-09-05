@@ -1,14 +1,10 @@
 #pragma once
-
-// TODO: [minor] Duplicate #pragma once below. Delete it and move <limits> in
-//       with the other includes.
-#include <limits>
-#pragma once
+/* clang-format off */
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace moba {
-// clang-format off
 using i8    = std::int8_t;
 using i16   = std::int16_t;
 using i32   = std::int32_t;
@@ -38,12 +34,4 @@ using u128  = unsigned __int128;
 #else
 #error "fx64 multiply requires 128-bit integer support (GCC/Clang)"
 #endif
-
-// clang-format on
-
-// TODO: [missing] Nothing asserts the aliases are the widths they claim.
-//       Add static_asserts on sizeof and std::is_signed_v for each. Free, and
-//       turns a future target mismatch into a compile error instead of a
-//       corrupted hash.
-
 } // namespace moba

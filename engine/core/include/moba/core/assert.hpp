@@ -2,98 +2,86 @@
 
 // moba/core/assert.hpp -- MOBA_ASSERT / MOBA_ASSERT_MSG
 //
-// Verified working: both macros defined in both arms; both test cond; cond
-// evaluated exactly once; dangling-else safe; usable in a constexpr function
-// (static_assert on a passing call compiles); compiles clean under the full
-// warning set in debug. [[unlikely]] and __func__ are both good additions --
-// __func__ works in constructors and static functions.
+// Both macros are defined in both arms and both test cond. cond is evaluated
+// exactly once in debug and zero times under NDEBUG. Dangling-else safe, usable
+// in a constexpr function, clean under the full warning set in both arms.
 //
-// __FILE__ is already repo-relative: -fmacro-prefix-map in MobaWarnings.cmake
-// strips the source root, so output leaks no home directory.
+// _MSG is the primitive and MOBA_ASSERT defers to it, so the two cannot drift
+// apart -- that is how _MSG lost its condition check the first time. It passes
+// "" rather than nullptr, which a %s conversion would treat as UB.
 //
-// TODO: [BUG] `(void)msg` EVALUATES msg. It is an expression statement, not an
-//       unevaluated operand like sizeof. So a msg with side effects runs in
-//       release and not in debug -- backwards from every expectation:
-//           MOBA_ASSERT_MSG(1 == 1, side_effect());
-//               debug  -> side_effect() called 0 times
-//               NDEBUG -> side_effect() called 1 time
-//       Fix: `(void)sizeof(msg)`, matching the cond line directly above it.
+// Four things here are load-bearing and look like cruft. Do not "simplify" them:
 //
-// TODO: [BUG] A static (internal-linkage) function used only inside an
-//       assertion fails the release build:
-//           static bool invariant() { return true; }
-//           MOBA_ASSERT(invariant());
-//           NDEBUG -> error: function 'invariant' is not needed and will not
-//                     be emitted [-Werror,-Wunneeded-internal-declaration]
-//       sizeof does not odr-use, so the function is never emitted and -Wall
-//       objects. Variables are fine -- sizeof suppresses -Wunused-variable --
-//       but functions are not, and `static bool invariant_holds()` used only
-//       in asserts is a shape this codebase will grow.
-//       Fix: `(void)(false && (cond))`. Potentially-evaluated, so the function
-//       is emitted; the optimiser drops the branch. Verified it fixes the
-//       case and still forces contextual conversion to bool.
+//   1. The NDEBUG arm uses `(void)(false && (cond))`, NOT `(void)sizeof(cond)`.
+//      sizeof does not odr-use, so a static function called only inside an
+//      assertion is never emitted and -Wunneeded-internal-declaration fails the
+//      release build:
+//          static bool invariant() { return true; }
+//          MOBA_ASSERT(invariant());   // NDEBUG -> -Werror
+//      Variables are fine (sizeof suppresses -Wunused-variable); functions are
+//      not, and `static bool invariant_holds()` used only in asserts is a shape
+//      this codebase will grow. `false && (cond)` is potentially-evaluated, so
+//      the function is emitted and the optimiser drops the branch. It still
+//      forces contextual conversion to bool.
 //
-// TODO: [duplication] Four near-identical bodies now. Make MOBA_ASSERT_MSG the
-//       primitive in each arm and define MOBA_ASSERT(cond) in terms of it.
-//       This is how _MSG lost its condition check the first time.
+//   2. assertion_failed is `inline`. moba_core is an INTERFACE (header-only)
+//      library, so there is no .cpp to define it in.
 //
-//       Careful: `_MSG(cond, nullptr)` would pass nullptr to a %s conversion,
-//       which is UB. If the failure path becomes an out-of-line function (see
-//       below) it can branch on msg != nullptr; if it stays a macro, pass ""
-//       rather than nullptr.
+//   3. assertion_failed is deliberately NOT constexpr. That is what produces
+//          note: non-constexpr function assertion_failed cannot be used in a
+//                constant expression
+//      on a failing constant evaluation, instead of the useless
+//      `read of non-constexpr variable __stderrp`.
 //
-// TODO: [ergonomics] constexpr use works, but a failing assert during constant
-//       evaluation reports:
-//           note: read of non-constexpr variable '__stderrp' is not allowed
-//       Route the failure through one named [[noreturn]] detail function:
-//           note: non-constexpr function 'assertion_failed' cannot be used
-//       Also fixes the include asymmetry: <cstdio>/<cstdlib> are pulled into
-//       every debug TU and none in release, from a header this widely
-//       included.
-
+//   4. <cstdio>/<cstdlib>/<source_location>/<string_view> are included inside
+//      the debug arm only. Hoisting them to the top of the file makes every
+//      release TU pay for headers it never uses.
+//
+// source_location beats __FILE__/__func__ on both counts: it names the macro-s
+// USE site, and function_name() gives the full signature (`int checked(int)`)
+// where __func__ gives bare `checked`. -fmacro-prefix-map in MobaWarnings.cmake
+// strips the source root from both __FILE__ and source_location::file_name(),
+// so no home directory leaks.
 #if defined(NDEBUG)
-
-#define MOBA_ASSERT(cond)                                                                          \
-  do {                                                                                             \
-    (void)sizeof(cond);                                                                            \
-  } while (false)
-
 #define MOBA_ASSERT_MSG(cond, msg)                                                                 \
   do {                                                                                             \
-    (void)sizeof(cond);                                                                            \
-    (void)msg;                                                                                     \
+    (void)(false && (cond));                                                                       \
+    (void)sizeof(msg);                                                                             \
   } while (false)
+#define MOBA_ASSERT(cond) MOBA_ASSERT_MSG(cond, "")
 
 #else
 #include <cstdio>
 #include <cstdlib>
+#include <source_location>
+#include <string_view>
 
-#define MOBA_ASSERT(cond)                                                                          \
-  do {                                                                                             \
-    if (cond) [[likely]]                                                                           \
-      break;                                                                                       \
-    std::fprintf(stderr, "assert failed at %s:%d in %s: %s\n", __FILE__, __LINE__, __func__,       \
-                 #cond);                                                                           \
-    std::abort();                                                                                  \
-  } while (false)
+namespace moba::detail {
+[[noreturn]] inline void
+assertion_failed(std::string_view cond, std::string_view msg,
+                 std::source_location loc = std::source_location::current()) {
+  std::fprintf(stderr, "assert failed at %s:%u in %s: %.*s: %.*s\n", loc.file_name(), loc.line(),
+               loc.function_name(), static_cast<int>(cond.size()), cond.data(),
+               static_cast<int>(msg.size()), msg.data());
+  std::abort();
+}
+} // namespace moba::detail
+
 #define MOBA_ASSERT_MSG(cond, msg)                                                                 \
   do {                                                                                             \
-    if (cond) [[likely]]                                                                           \
-      break;                                                                                       \
-    std::fprintf(stderr, "assert failed at %s:%d in %s: %s: %s\n", __FILE__, __LINE__, __func__,   \
-                 #cond, msg);                                                                      \
-    std::abort();                                                                                  \
+    if (cond) [[likely]] {                                                                         \
+    } else moba::detail::assertion_failed(#cond, msg);                                             \
   } while (false)
+
+#define MOBA_ASSERT(cond) MOBA_ASSERT_MSG(cond, "")
 #endif
 
-// TODO: [missing] No tests. test_core.cpp must cover:
-//         - both macros defined and compiling, in a debug TU AND an NDEBUG TU
-//           (the second would have caught the release bug)
-//         - a TRUE condition does not abort
-//         - usable as `if (x) MOBA_ASSERT(y); else z();`
-//         - cond evaluated exactly once (counter expression)
-//         - usable in a constexpr function (static_assert on a passing call)
-//         - under NDEBUG, a variable used only in an assert does not trip
-//           -Wunused-variable
-//       "Does a failing assert actually abort" is a death test; drive it from
-//       CMake with a tiny executable and a ctest WILL_FAIL property.
+// Tests live in engine/core/tests/test_core.cpp: both macros defined, true
+// condition does not abort, dangling-else safe, evaluation count (once in
+// debug, zero under NDEBUG), constexpr usability, and no -Wunused-variable
+// under NDEBUG. Both arms are exercised because the debug and release presets
+// build the same file.
+//
+// TODO: [missing] Death test -- "does a failing assert actually abort". Needs a
+//       tiny separate executable driven from CMake with a ctest WILL_FAIL
+//       property; it cannot live in the doctest binary because it aborts.
