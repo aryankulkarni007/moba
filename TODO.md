@@ -3,10 +3,13 @@
 Generated 2026-08-30 from a repo-wide TODO sweep. Last revised 2026-09-08.
 Ordering is by dependency and decay cost, not by file.
 
-Status of the foundation: `fx.hpp`, `fx64.hpp`, `types.hpp`, `assert.hpp`,
-`strong_id.hpp` and `format.hpp` are written AND tested -- 63 ctest entries
-green under all four presets. Everything else in `fx/` and `core/` is a
-spec-only stub: one line of code, the rest comment.
+Status of the foundation: `types.hpp`, `assert.hpp`, `strong_id.hpp`,
+`fx.hpp`, `fx64.hpp`, `isqrt.hpp`, `vec2.hpp`, `shapes.hpp` and `format.hpp`
+are written AND tested -- 114 ctest entries green under all four presets.
+
+Two spec-only stubs remain, both deferred on purpose rather than pending:
+`fx/angle.hpp` (a side branch, not a dependency) and `core/result.hpp` (first
+caller is phase 2).
 
 Line numbers appear only in the CLOSED P0/P1 items, where they are a record of
 where a bug was, not a pointer to live code. Open items reference the `TODO:`
@@ -234,7 +237,7 @@ two days become two weeks.
       way the note assumed. `operator*` is a member of `fx`, so it cannot call
       `mul_wide`/`narrow` -- fx64 does not exist yet at that point in the
       include graph. What moved is the part that could actually drift: the
-      Q32.32 -> Q16.16 shift is now `detail::narrow_q32` in `fx.hpp`, templated
+      Q32.32 -> Q16.16 shift is now `detail::unscale_fx` in `fx.hpp`, templated
       so the i128 path shares it too. Four spellings collapsed to one --
       `fx::operator*`, `fx64::operator*(fx)`, `narrow()` and `narrow_sat()`.
       Two of those wrote the shift as `fx::SHIFT` and two as

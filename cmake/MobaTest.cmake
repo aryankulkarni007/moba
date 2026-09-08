@@ -3,7 +3,14 @@
 # One test framework project-wide (doctest), one shared main(), one way to
 # declare a test binary.
 #
-#   moba_add_test(test_fx SOURCES test_fx.cpp test_fx64.cpp LIBS moba::fx)
+#   moba_add_test(test_fx
+#       SOURCES test_fx.cpp test_fx64.cpp test_isqrt.cpp test_vec2.cpp
+#               test_shapes.cpp
+#       LIBS    moba::fx
+#   )
+#
+# One binary per library rather than per header: the cases are cheap and the
+# link step is not.
 #
 # Each TEST_CASE becomes its own ctest entry, so a failure names the case
 # rather than the binary.

@@ -94,7 +94,7 @@ static_assert(std::numeric_limits<f64>::is_iec559 && sizeof(f64) == 8);
 // This sits at the bottom of the include graph -- fx.hpp and strong_id.hpp
 // include it directly, and everything that touches a number in the sim reaches
 // it through one of those -- so whatever lands here is paid for by the whole
-// project. The three includes above cost ~4300 preprocessed lines between
+// project. The three includes above cost ~3700 preprocessed lines between
 // them. A single convenience alias undoes that:
 //
 //     <span>          71751        <utility>       10113

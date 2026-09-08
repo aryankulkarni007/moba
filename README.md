@@ -36,17 +36,25 @@ ctest --preset debug
 | `release-san` | RelWithDebInfo | ASan + UBSan, hardened stdlib | bugs that only appear under optimisation |
 | `gcc-release` | Release        | --                            | cross-compiler determinism check         |
 
-`ctest` registers one entry per doctest `TEST_CASE`, so `ctest -R <pattern>`
-selects individual cases.
+`ctest` registers one entry per doctest `TEST_CASE`, under the case name alone.
+The `TEST_SUITE` becomes a ctest *label*, not part of the name, so the two
+selectors do different jobs:
+
+```sh
+ctest --preset debug -R 'four-path'    # one case, by name
+ctest --preset debug -L 'fx/shapes'    # a whole suite, by label
+ctest --preset debug -LE death         # everything except the death tests
+```
 
 ## Layout
 
 ```
-cmake/           build modules: warnings, compiler guard, test helper
+cmake/           build modules: warnings, compiler guard, test and death-test helpers
 engine/          game-agnostic libraries
-  core/          types, assert, containers        -> #include <moba/core/...>
-  fx/            fixed point, angles, vectors     -> #include <moba/fx/...>
+  core/          types, assert, ids               -> #include <moba/core/...>
+  fx/            fixed point, vectors, shapes     -> #include <moba/fx/...>
 tests/           shared doctest main()
+.github/         the CI matrix described at the foot of this file
 ```
 
 Libraries are `INTERFACE` (header-only) while they are header-only, `STATIC`
@@ -63,15 +71,28 @@ Phase 0.
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `core/types`, `core/assert`, `core/strong_id`  | written, tested                                                                           |
 | `fx`, `fx64`                                   | written, tested -- including the four-path rounding agreement and a golden hash per width |
+| `fx/isqrt`, `fx/vec2`, `fx/shapes`             | written, tested. `shapes.hpp` is the phase-2 hitbox surface                               |
+| `fx/angle`                                     | spec only. A side branch rather than a dependency -- deferred until aim handling wants it |
 | `core/result`                                  | spec only, deliberately. First caller is phase 2                                          |
-| `fx/isqrt`, `fx/angle`, `fx/vec2`, `fx/shapes` | spec only. This is the critical path                                                      |
 
 Open work is tracked two ways: `TODO.md` for anything spanning more than one
 file, and `TODO:` comments in the headers for everything else --
 `grep -rn "TODO:" engine`. Each comment carries a tag saying what kind of
-decision it is: `[missing]`, `[decide]`, `[sequencing]`, `[duplication]`.
+decision it is: `[missing]`, `[decide]`, `[sequencing]`, `[phase 1]`.
 
 The determinism claim rests on the golden hashes in `test_fx.cpp` and
 `test_fx64.cpp`. Each folds ~100k mixed operations into one committed
 constant, and every CI row -- x86-64 and AArch64, Clang and GCC, every preset
 -- checks that same constant. Two rows disagreeing is a red build.
+
+Three rules the suite enforces, each learned the hard way:
+
+- **A header with no test is never compiled.** The libraries are `INTERFACE`,
+  and `FILE_SET HEADERS` is IDE metadata, not a build step. Every header needs
+  a test that includes it for that reason alone.
+- **A test that must fail has to say why.** `WILL_FAIL` and a bare non-zero
+  exit both pass on the wrong failure, so the compile-fail tests match the
+  specific diagnostic and the death tests match the printed message.
+- **No commas in `TEST_CASE` names.** doctest's discovery emits an empty
+  `LABELS` for those, so the case runs under a bare `ctest` but `ctest -L`
+  silently skips it.

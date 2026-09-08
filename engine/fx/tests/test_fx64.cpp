@@ -20,6 +20,10 @@
 //
 // The second half is surface fx does not have: widen/narrow/mul_wide, the
 // mixed fx operators, and the four-path rounding agreement.
+//
+// The fixed_point concept is checked here rather than in test_fx.cpp because
+// this is the file that would notice: the concept exists to catch a member
+// added to fx and forgotten on fx64.
 
 namespace {
 

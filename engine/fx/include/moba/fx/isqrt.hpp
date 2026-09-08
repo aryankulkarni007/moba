@@ -42,10 +42,11 @@
 // (r+1)^2 reaches 2^64. Cover perfect squares exactly, k^2 +/- 1, powers of
 // two and four, 0, 1, UINT64_MAX, and both directions of the scaling rule.
 //
-// TODO: [missing] Callers: vec2::length, vec2::normalise. If a third appears,
-//       check whether it wants a squared comparison instead -- dist_sq against
-//       mul_wide(r, r) needs no root at all, and hitboxes run per pair per
-//       tick.
+// CALLERS -- sqrt(fx) below, and vec2::length. Nothing else, and that is the
+// design working: shapes.hpp is the whole hitbox surface and takes no square
+// root at all, because every predicate there compares a squared distance
+// against sq(r). If a third caller appears, check it wants a root before
+// giving it one.
 
 #include <moba/core/types.hpp>
 #include <moba/fx/fx.hpp>

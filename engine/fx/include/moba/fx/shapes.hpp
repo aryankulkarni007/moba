@@ -19,6 +19,15 @@
 // squared radius, which is why the distances return fx64: fx tops out near
 // 32767 and a squared distance passes that at 181 units. raycast would need a
 // root and is deliberately absent; see the note at the foot of the file.
+//
+// NO DIVISIONS EITHER, in the predicates. Only point-to-segment produces a
+// ratio, and detail::sq_dist carries it undivided so a comparison against a
+// squared radius stays exact and needs no divide; see detail::at_most. arm64
+// has no 128-bit divide instruction, so each one avoided is a call into
+// __udivti3 rather than an instruction.
+//
+// The value functions still divide, because returning a ratio as a number
+// requires it. Reach for a predicate when a yes/no is all you need.
 
 #include <moba/core/assert.hpp>
 #include <moba/core/types.hpp>
@@ -190,12 +199,14 @@ dist_sq_segment_segment(segment s, segment t) noexcept {
   );
 }
 
-/* PREDICATES -- none of these divide.
+/* PREDICATES -- all exact, none of them divide.
  *
- * Each is exact, and each agrees with the corresponding `distance <= radius^2`
- * written out by hand, because detail::at_most is floor_of(d) <= k rearranged
- * rather than a different comparison. Held there by "shapes: the divisionless
- * comparison agrees with the divided one". */
+ * The aabb and circle ones never had a ratio to begin with. The two capsule
+ * ones go through detail::at_most, which is floor_of(d) <= k rearranged rather
+ * than a different comparison, so a caller who writes the distance comparison
+ * out by hand gets the same answer. Held there by "shapes: the divisionless
+ * comparison agrees with the divided one" and "shapes: predicates agree with
+ * distance compared by hand". */
 
 [[nodiscard]] constexpr bool overlaps(circle a, circle b) noexcept {
   return distance_sq(a.c, b.c) <= sq(a.r + b.r);

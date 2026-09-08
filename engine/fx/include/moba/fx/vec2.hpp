@@ -98,35 +98,43 @@ static_assert(!std::is_aggregate_v<vec2>);
 
 }  // namespace moba
 
-// moba/fx/vec2.hpp -- 2D fixed-point vector. SPEC ONLY, not implemented.
+// moba/fx/vec2.hpp -- 2D fixed-point vector.
 //
-// TODO: [missing] Whole file. Needs fx (works) and angle (not written).
-//
-// struct vec2 { fx x, y; }  -- POD aggregate, no invariants.
+// struct vec2 { fx x, y; }  -- no invariants.
 //
 // Surface:
-//   + - unary- += -=
+//   + - unary- += -= ==
 //   operator*(fx) operator/(fx)
-//   dot(a,b) -> fx64
-//   cross(a,b) -> fx64          scalar z; sign gives which side of a line
-//   length_sq(v) -> fx64        see the decide below
-//   length(v) -> fx             needs isqrt
-//   distance_sq(a,b) -> fx64
+//   dot(a,b) -> fx64            exact via mul_wide; no per-term narrowing
+//   cross(a,b) -> fx64          signed area; sign gives which side of a line
+//   length_sq(v) -> fx64        written as dot(v, v), so they cannot diverge
+//   distance_sq(a,b) -> fx64    written as length_sq(a - b)
+//   length(v) -> fx             asserts the root fits i32
 //   normalise(v) -> vec2
-//   rotate(v, angle), perp(v), from_angle(angle, fx len), to_angle(v)
 //
-// TODO: [decide] length_sq must return fx64, not fx. fx's usable integer range
-//       is about +/-32767, so two units 300 apart give 90000 and overflow.
-//       Returning fx makes every range check wrong beyond ~181 units. This is
-//       correctness, not optimisation, and it fixes the signature of every
-//       range comparison in combat code.
+// DECIDED: dot, cross, length_sq and distance_sq all return fx64. fx's usable
+// integer range is about +/-32767, so a product of two coordinates leaves it
+// at 181 units apart and two points 300 apart give 90000. Returning fx made
+// every range check wrong past ~181 units, and dot(v,v) disagreed with
+// length_sq(v) at 200. Correctness, not optimisation, and it sets the
+// signature of every range comparison in combat code.
 //
 // Notes:
-//   - Prefer squared comparisons: `distance_sq(a,b) < mul_wide(r, r)` avoids
-//   isqrt, and
-//     hitbox tests run per-pair per-tick.
-//   - normalise() of a zero vector has no correct answer. Pick one, document
-//     it, {0,0} or assert. It must not be "undefined" -- both machines need
-//     the same result.
-//   - Accumulate in fx64 inside dot/length_sq and narrow once at the end.
-//     Narrowing per-term loses precision in an operand-order-dependent way.
+//   - Prefer squared comparisons. `distance_sq(a,b) <= mul_wide(r, r)` needs
+//     no root, and hitbox tests run per pair per tick. mul_wide rather than
+//     r*r: both sides must be fx64, and r*r overflows past 181 units anyway.
+//   - shapes.hpp is built entirely on these four and takes no square root.
+//
+// TODO: [decide] normalise() of a zero vector has no correct answer. Pick one,
+//       document it, {0,0} or assert. It currently returns whatever fx
+//       division by zero does, which is (I32_MAX, I32_MAX), and that is not a
+//       decision. Both machines need the same result.
+//
+// TODO: [missing] No layout static_asserts here, though test_vec2.cpp checks
+//       them. vec2 goes in the snapshot, so it wants the same six lines fx and
+//       fx64 carry in their own headers.
+//
+// TODO: [missing] perp(v) needs no angle and could be written now.
+//       operator*(fx, vec2) is missing the commuted form fx and fx64 provide.
+//
+// TODO: [missing] rotate/from_angle/to_angle need angle.hpp.
