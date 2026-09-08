@@ -30,6 +30,54 @@ constexpr moba::i64 iabs(moba::i64 v) noexcept { return v < 0 ? -v : v; }
 
 }  // namespace
 
+// A near miss: right storage and layout, from_raw, some arithmetic, and no
+// trunc_to_int, no saturating family, no sign(). This is what a third
+// fixed-point type would look like half-written, and it is what shows
+// moba::fixed_point still rejects something. i32 and double are too far away
+// to show that; a concept reduced to `true` would reject neither of them, but
+// one that had merely lost its free-function block would still reject both.
+//
+// Outside the anonymous namespace deliberately. A requires-expression is
+// unevaluated, so `{ T::ZERO }` never odr-uses the constant; with internal
+// linkage clang reports all five as "not needed and will not be emitted" and
+// -Werror stops the build. Same trap as the sizeof note in assert.hpp.
+struct almost_fixed_point {
+  moba::i32 raw = 0;
+
+  static constexpr int       SHIFT = 16;
+  static constexpr moba::i32 SCALE = 1 << SHIFT;
+
+  constexpr almost_fixed_point() noexcept = default;
+  static constexpr almost_fixed_point from_raw(moba::i32 r) noexcept {
+    almost_fixed_point a{};
+    a.raw = r;
+    return a;
+  }
+  static constexpr almost_fixed_point from_int(moba::i32 n) noexcept {
+    return from_raw(n * SCALE);
+  }
+
+  [[nodiscard]] constexpr moba::i32 floor_to_int() const noexcept {
+    return raw >> SHIFT;
+  }
+
+  constexpr almost_fixed_point operator+(almost_fixed_point o) const noexcept {
+    return from_raw(raw + o.raw);
+  }
+  constexpr std::strong_ordering operator<=>(const almost_fixed_point&) const = default;
+
+  static const almost_fixed_point ZERO, ONE, EPSILON, MIN, MAX;
+};
+
+inline constexpr almost_fixed_point almost_fixed_point::ZERO    = almost_fixed_point::from_raw(0);
+inline constexpr almost_fixed_point almost_fixed_point::ONE     = almost_fixed_point::from_raw(almost_fixed_point::SCALE);
+inline constexpr almost_fixed_point almost_fixed_point::EPSILON = almost_fixed_point::from_raw(1);
+inline constexpr almost_fixed_point almost_fixed_point::MIN     = almost_fixed_point::from_raw(moba::I32_MIN);
+inline constexpr almost_fixed_point almost_fixed_point::MAX     = almost_fixed_point::from_raw(moba::I32_MAX);
+
+// The three the concept is meant to notice are missing stay missing:
+// trunc_to_int/round_to_int, abs/min/max/clamp/sign, and the _sat family.
+
 using namespace moba;
 
 TEST_SUITE("fx/fx64") {
@@ -518,6 +566,23 @@ TEST_SUITE("fx/fx64") {
         if (b.raw != 0) CHECK(div_sat(a, b) == a / b);
       }
     }
+  }
+
+  TEST_CASE("fx64: the fixed_point concept is satisfied and falsifiable") {
+    // The headers already static_assert these two, so this half cannot fail
+    // here without failing the build first. Restating it names the property
+    // in ctest for free.
+    static_assert(fixed_point<fx>);
+    static_assert(fixed_point<fx64>);
+
+    // The half that needs a test. A concept with a typo in it, or one missing
+    // a whole block, still satisfies both lines above, so those two cannot
+    // tell that it has stopped constraining anything. Same hole the
+    // compile-fail tests close, and it closes the same way: assert what must
+    // be rejected, not only what must pass.
+    static_assert(!fixed_point<i32>);                 // no members at all
+    static_assert(!fixed_point<double>);              // not even an integer
+    static_assert(!fixed_point<almost_fixed_point>);  // the near miss above
   }
 
   TEST_CASE("fx64: byte representation") {

@@ -39,18 +39,24 @@
 // every i32 converts to double exactly, and dividing by 2^16 only changes the
 // exponent.
 
-// test_fx.cpp and test_fx64.cpp include this header, which is what compiles it:
+// Every test file in fx/ includes this header, which is what compiles it:
 // moba_fx is an INTERFACE library and FILE_SET HEADERS is IDE metadata, not a
 // compile. Keep those includes -- drop them and a break here ships silently,
 // and doctest goes back to printing `CHECK( {?} == {?} )`. The same trap
 // applies to every header in the project; strong_id.hpp went unchecked for
 // exactly this reason until test_strong_id.cpp was written.
 
-// TODO: [missing] vec2 and angle formatters, once those exist.
+// TODO: [missing] angle formatter, once angle.hpp exists.
+//
+// TODO: [decide] shapes.hpp has no formatters. circle/segment/aabb/capsule are
+//       all trivial compositions of vec2 and fx, so they are cheap to add;
+//       the question is whether a hitbox is ever printed rather than asserted
+//       on. Add when something needs to read one.
 
 #include <format>
 #include <moba/fx/fx.hpp>
 #include <moba/fx/fx64.hpp>
+#include <moba/fx/vec2.hpp>
 #include <ostream>
 
 namespace moba {
@@ -63,10 +69,11 @@ namespace moba {
 [[nodiscard]] constexpr double to_double_lossy(fx64 v) noexcept {
   return static_cast<double>(v.raw) / static_cast<double>(fx64::SCALE);
 }
-} // namespace moba
+}  // namespace moba
 
 // specialisations must be at global scope, and format() must be const.
-template <> struct std::formatter<moba::fx> : std::formatter<double> {
+template <>
+struct std::formatter<moba::fx> : std::formatter<double> {
   auto format(moba::fx v, std::format_context &ctx) const {
     // the base writes the number and hands back the cursor; append after it
     auto out = std::formatter<double>::format(moba::to_double(v), ctx);
@@ -74,10 +81,36 @@ template <> struct std::formatter<moba::fx> : std::formatter<double> {
   }
 };
 
-template <> struct std::formatter<moba::fx64> : std::formatter<double> {
+template <>
+struct std::formatter<moba::fx64> : std::formatter<double> {
   auto format(moba::fx64 v, std::format_context &ctx) const {
     auto out = std::formatter<double>::format(moba::to_double_lossy(v), ctx);
     return std::format_to(out, " fx64({})", v.raw);
+  }
+};
+
+// delegates each component to the fx formatter above rather than reprinting a
+// number, so "how an fx looks" has one definition. Gives
+// "(1.5 fx(98304), 2.25 fx(147456))", and the inherited parse() means the
+// float spec still applies to both components.
+//
+// format() must not be static: the library calls it on a formatter object, and
+// a static member would hide the base's overload set rather than extend it.
+//
+// advance_to is the part that is easy to get wrong. formatter<T>::format
+// writes at ctx.out() and returns the new position; it does not move the
+// context itself. Without advancing between components the second write starts
+// where the first did.
+template <>
+struct std::formatter<moba::vec2> : std::formatter<moba::fx> {
+  auto format(moba::vec2 v, std::format_context &ctx) const {
+    auto out = std::format_to(ctx.out(), "(");
+    ctx.advance_to(out);
+    out = std::formatter<moba::fx>::format(v.x, ctx);
+    out = std::format_to(out, ", ");
+    ctx.advance_to(out);
+    out = std::formatter<moba::fx>::format(v.y, ctx);
+    return std::format_to(out, ")");
   }
 };
 
@@ -90,4 +123,7 @@ inline std::ostream &operator<<(std::ostream &os, fx64 v) {
   return os << std::format("{}", v);
 }
 
-} // namespace moba
+inline std::ostream &operator<<(std::ostream &os, vec2 v) {
+  return os << std::format("{}", v);
+}
+}  // namespace moba

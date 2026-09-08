@@ -1,6 +1,6 @@
 # moba
 
-Codename. A deterministic 1v1 arena simulation in C++20.
+Codename. A deterministic 5v5 arena simulation in C++20.
 
 The hard requirement driving every technical decision: **two machines must
 produce bit-identical simulation results.** Without that, rollback netcode and
@@ -10,12 +10,12 @@ agreement as the acceptance test.
 
 ## Prerequisites
 
-| | |
-|---|---|
-| CMake | >= 3.24 |
-| Ninja | any |
-| Clang | upstream LLVM. **Not Apple Clang** -- it reports `AppleClang` and the presets reject it (`brew install llvm`, put it ahead of `/usr/bin` on `PATH`) |
-| GCC | only for `gcc-release`. `brew install gcc` currently gives `g++-16`, which is what the preset names -- if brew moves on, update `CMakePresets.json` rather than working around it |
+|       |                                                                                                                                                                                   |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CMake | >= 3.24                                                                                                                                                                           |
+| Ninja | any                                                                                                                                                                               |
+| Clang | upstream LLVM. **Not Apple Clang** -- it reports `AppleClang` and the presets reject it (`brew install llvm`, put it ahead of `/usr/bin` on `PATH`)                               |
+| GCC   | only for `gcc-release`. `brew install gcc` currently gives `g++-16`, which is what the preset names -- if brew moves on, update `CMakePresets.json` rather than working around it |
 
 The compiler check is deliberate: a golden hash produced by an unexpected
 compiler is not comparable with any other, so configure fails rather than
@@ -29,12 +29,12 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-| Preset | Build type | Sanitizers | Purpose |
-|---|---|---|---|
-| `debug` | Debug | ASan + UBSan, hardened stdlib | day-to-day |
-| `release` | Release | -- | golden hash reference |
+| Preset        | Build type     | Sanitizers                    | Purpose                                  |
+| ------------- | -------------- | ----------------------------- | ---------------------------------------- |
+| `debug`       | Debug          | ASan + UBSan, hardened stdlib | day-to-day                               |
+| `release`     | Release        | --                            | golden hash reference                    |
 | `release-san` | RelWithDebInfo | ASan + UBSan, hardened stdlib | bugs that only appear under optimisation |
-| `gcc-release` | Release | -- | cross-compiler determinism check |
+| `gcc-release` | Release        | --                            | cross-compiler determinism check         |
 
 `ctest` registers one entry per doctest `TEST_CASE`, so `ctest -R <pattern>`
 selects individual cases.
@@ -59,12 +59,12 @@ mismatch on the hot path, and a flag mismatch is a desync.
 
 Phase 0.
 
-| | |
-|---|---|
-| `core/types`, `core/assert`, `core/strong_id` | written, tested |
-| `fx`, `fx64` | written, tested -- including the four-path rounding agreement and a golden hash per width |
-| `core/result` | spec only, deliberately. First caller is phase 2 |
-| `fx/isqrt`, `fx/angle`, `fx/vec2`, `fx/shapes` | spec only. This is the critical path |
+|                                                |                                                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `core/types`, `core/assert`, `core/strong_id`  | written, tested                                                                           |
+| `fx`, `fx64`                                   | written, tested -- including the four-path rounding agreement and a golden hash per width |
+| `core/result`                                  | spec only, deliberately. First caller is phase 2                                          |
+| `fx/isqrt`, `fx/angle`, `fx/vec2`, `fx/shapes` | spec only. This is the critical path                                                      |
 
 Open work is tracked two ways: `TODO.md` for anything spanning more than one
 file, and `TODO:` comments in the headers for everything else --

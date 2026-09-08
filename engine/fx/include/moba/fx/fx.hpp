@@ -51,6 +51,29 @@ template <typename T>
   if (num % den != 0 && ((num < 0) != (den < 0))) --q;
   return q;
 }
+
+/// Shift off exactly one Q16.16 scale factor, flooring.
+///
+/// Four operations spell this: fx::operator*, fx64::operator*(fx), narrow()
+/// and narrow_sat(). Two derived the shift from fx::SHIFT and two from
+/// fx64::SHIFT - fx::SHIFT; both are 16 only because Q32.32 is two Q16.16
+/// scale factors, so they would silently disagree if fx ever became Q8.24.
+/// One definition removes that.
+///
+/// Templated so the i128 path (fx64 * fx, Q48.48 -> Q32.32) shares it. Note
+/// that this is not an fx64 -> fx conversion; narrow() is. This is the shift
+/// inside it, one level down, and it neither changes type nor checks range.
+///
+/// The literal 16 is unavoidable here: fx::operator* is a member, so this has
+/// to precede the struct. A static_assert after each type checks it.
+///
+/// Callers keep their own range check. MOBA_ASSERT reports source_location, so
+/// moving it in here would make every overflow abort name this helper instead
+/// of the operation that overflowed.
+template <typename T>
+[[nodiscard]] constexpr T unscale_fx(T wide) noexcept {
+  return wide >> 16;  // arithmetic, so it floors
+}
 }  // namespace detail
 
 /* fx -- signed Q16.16 fixed point.
@@ -183,20 +206,17 @@ struct [[nodiscard]] fx {
     return from_raw(-raw);
   }
 
-  // TODO: [duplication] This is mul_wide() + narrow() open-coded. fx64.hpp
-  //       includes fx.hpp so it cannot be reused directly. The two options
-  //       were: accept the duplication and property-test that the spellings
-  //       agree, or move the shift to a shared detail header. The test route
-  //       is taken -- "fx64: four-path rounding agreement" in test_fx64.cpp
-  //       pins this against narrow(mul_wide(a,b)) and both fx64 multiplies
-  //       over a signed sweep. Deduping is still open, but it is now a
-  //       tidiness question rather than a correctness one.
+  // Still mul_wide() + narrow() open-coded, and it has to be: operator* is a
+  // member of fx, and fx64 does not exist yet in the include graph. The part
+  // that could drift -- shift direction, width, rounding -- lives once, in
+  // detail::unscale_fx. What is left duplicated is the range check and the
+  // cast, both of which are per-type anyway.
   constexpr fx operator*(fx o) const noexcept {
     // both sides are 65536 too big -> widen to 64 bits then shift off one
     // factor. The i64 product maxes at 2^62, so it cannot itself overflow.
-    const i64 wide = static_cast<i64>(raw) * o.raw;
-    MOBA_ASSERT(detail::fits_i32(wide >> SHIFT));
-    return from_raw(static_cast<i32>(wide >> SHIFT));
+    const i64 shifted = detail::unscale_fx(static_cast<i64>(raw) * o.raw);
+    MOBA_ASSERT(detail::fits_i32(shifted));
+    return from_raw(static_cast<i32>(shifted));
   }
 
   // Division by zero is the policy's one exception: no wrapping answer exists,
@@ -285,6 +305,10 @@ static_assert(std::is_trivially_copyable_v<fx>);
 static_assert(std::is_standard_layout_v<fx>);
 static_assert(std::has_unique_object_representations_v<fx>);
 static_assert(!std::is_aggregate_v<fx>);  // pins the `fx a{ 4 }` fix above
+
+// detail::unscale_fx hardcodes its shift; it is declared before fx is a
+// complete type. fx64.hpp carries the matching check.
+static_assert(fx::SHIFT == 16, "detail::unscale_fx hardcodes this");
 
 /* FREE FUNCTIONS
  *
@@ -496,10 +520,108 @@ consteval fx operator""_fx(const char* s) {
 // <moba/fx/format.hpp> instead, so the include graph keeps floating point out
 // of sim TUs with nothing to remember and no macro to get wrong.
 
-// TODO: [decide] A `fixed_point` concept over fx and fx64. abs/min/max/clamp/
-//       sign now exist for both types, so the second copy the earlier note
-//       was waiting for has arrived -- drift between the two IS the
-//       rounding-disagreement bug class. Do it before adding a third.
+/* THE SHARED SURFACE
+ *
+ * fx and fx64 are one type at two widths, written out twice by hand. This
+ * names the surface both must have; each header checks its own type against
+ * it, so a member added to one and skipped on the other fails to compile in
+ * the file that skipped it.
+ *
+ * It constrains shape, not behaviour. Two types can satisfy every line here
+ * and still round differently, which is the desync. Agreement is measured
+ * instead, by "fx64: four-path rounding agreement" and the golden hashes.
+ *
+ * Left out on purpose:
+ *   floor/ceil/round/frac/lerp  fx only; fx64 is scratch space and nothing
+ *                               rounds a value about to be narrowed
+ *   from_ratio                  consteval, and fx64 has no literal syntax
+ *   widen / narrow              a relation between widths, not a property of
+ *                               one type
+ *   MAX_INT / MIN_INT           fx needs the from_int range guard; fx64's
+ *                               from_int is total over i32
+ */
+namespace detail {
+/// `{ expr } -> yields<T>` reads "expr has type T once references and const are
+/// stripped". std::same_as would do, but <concepts> costs another ~1000
+/// preprocessed lines over the <type_traits> already included here. The
+/// stripping matters: decltype of a static data member in a requires-clause is
+/// `const T&`, so a bare same-type check would reject every constant below.
+template <typename Got, typename Want>
+concept yields = std::is_same_v<std::remove_cvref_t<Got>, Want>;
+}  // namespace detail
+
+template <typename T>
+concept fixed_point =
+    // An fx is its bytes. The world is copied and fingerprinted as a plain
+    // block, so padding the compiler may leave holding junk would report a
+    // desync that never happened. Same four checks fx and fx64 make on
+    // themselves, promoted into the contract.
+    std::is_trivially_copyable_v<T> && std::is_standard_layout_v<T>
+    && std::has_unique_object_representations_v<T> && !std::is_aggregate_v<T>
+    && requires(T v, T w, i32 n) {
+         /* REPRESENTATION -- one signed integer, and nothing else in the
+          * object. The sizeof line is what forbids a second member. */
+         requires std::is_integral_v<decltype(v.raw)>;
+         requires std::is_signed_v<decltype(v.raw)>;
+         requires sizeof(T) == sizeof(v.raw);
+         { T::SHIFT } -> detail::yields<int>;
+         { T::SCALE } -> detail::yields<decltype(v.raw)>;
+
+         /* CONSTRUCTION -- named, never implicit. from_raw and from_int are
+          * the two readings a bare constructor could not tell apart. */
+         { T::from_raw(v.raw) } -> detail::yields<T>;
+         { T::from_int(n) } -> detail::yields<T>;
+
+         /* CONSTANTS */
+         { T::ZERO } -> detail::yields<T>;
+         { T::ONE } -> detail::yields<T>;
+         { T::EPSILON } -> detail::yields<T>;
+         { T::MIN } -> detail::yields<T>;
+         { T::MAX } -> detail::yields<T>;
+
+         /* CONVERSION TO INTEGER -- three names, three answers. A type
+          * offering only one is the failure this catches: callers reach for
+          * whichever exists and get the wrong rounding. */
+         { v.floor_to_int() } -> detail::yields<decltype(v.raw)>;
+         { v.trunc_to_int() } -> detail::yields<decltype(v.raw)>;
+         { v.round_to_int() } -> detail::yields<decltype(v.raw)>;
+
+         /* ARITHMETIC, including scaling by a plain integer both ways round */
+         { v + w } -> detail::yields<T>;
+         { v - w } -> detail::yields<T>;
+         { v * w } -> detail::yields<T>;
+         { v / w } -> detail::yields<T>;
+         { -v } -> detail::yields<T>;
+         { v * n } -> detail::yields<T>;
+         { v / n } -> detail::yields<T>;
+         { n * v } -> detail::yields<T>;
+         { v += w } -> detail::yields<T>;
+         { v -= w } -> detail::yields<T>;
+         { v *= w } -> detail::yields<T>;
+         { v /= w } -> detail::yields<T>;
+
+         /* COMPARISON -- strong, not partial: no NaN, and equal values are
+          * interchangeable. */
+         { v <=> w } -> detail::yields<std::strong_ordering>;
+         { v == w } -> detail::yields<bool>;
+
+         /* FREE FUNCTIONS -- found by ADL, hence unqualified */
+         { abs(v) } -> detail::yields<T>;
+         { min(v, w) } -> detail::yields<T>;
+         { max(v, w) } -> detail::yields<T>;
+         { clamp(v, v, w) } -> detail::yields<T>;
+         { sign(v) } -> detail::yields<i32>;
+
+         /* SATURATING FAMILY -- opt-in at the call site, required of the
+          * type. A caller who finds add_sat but no mul_sat writes the
+          * unsaturated multiply instead. */
+         { add_sat(v, w) } -> detail::yields<T>;
+         { sub_sat(v, w) } -> detail::yields<T>;
+         { mul_sat(v, w) } -> detail::yields<T>;
+         { div_sat(v, w) } -> detail::yields<T>;
+       };
+
+static_assert(fixed_point<fx>);
 
 // TODO: [sequencing] Dimensional units on fx (metres vs seconds vs damage).
 //       Not the same job as type-safe IDs -- those are in, see

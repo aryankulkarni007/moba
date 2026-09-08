@@ -3,7 +3,8 @@ moba_add_test(test_fx
         test_fx.cpp
         test_fx64.cpp
         test_isqrt.cpp
-        test_isqrt.cpp
+        test_vec2.cpp
+        test_shapes.cpp
     LIBS
         moba::fx
 )

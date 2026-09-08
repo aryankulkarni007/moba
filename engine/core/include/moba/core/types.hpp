@@ -35,8 +35,62 @@ using u128  = unsigned __int128;
 #error "fx64 multiply requires 128-bit integer support (GCC/Clang)"
 #endif
 
-// NUMERIC ALIASES ONLY. Nothing else belongs in this header.
+// TARGET GUARANTEES
 //
+// The aliases above are spellings, not promises. <cstdint> guarantees i32
+// is 32 bits, but nothing here guarantees a byte is 8 bits, that usize is
+// pointer-sized, or that __int128 is really 128 wide.
+//
+// these belong in the header, not in test_types.cpp: a test only fails on a
+// target the tests are run on, a static_assert fails on any target the project
+// compiles for.
+//
+// digits rather than sizeof, because digits counts value bits and so catches
+// padding and an odd byte width that sizeof would report as fine. Signed types
+// exclude the sign bit, hence the odd numbers.
+static_assert(std::numeric_limits<u8>::digits == 8, "a byte must be 8 bits");
+
+static_assert(std::numeric_limits<i8 >::digits ==  7 &&  std::numeric_limits<i8 >::is_signed);
+static_assert(std::numeric_limits<i16>::digits == 15 &&  std::numeric_limits<i16>::is_signed);
+static_assert(std::numeric_limits<i32>::digits == 31 &&  std::numeric_limits<i32>::is_signed);
+static_assert(std::numeric_limits<i64>::digits == 63 &&  std::numeric_limits<i64>::is_signed);
+
+static_assert(std::numeric_limits<u8 >::digits ==  8 && !std::numeric_limits<u8 >::is_signed);
+static_assert(std::numeric_limits<u16>::digits == 16 && !std::numeric_limits<u16>::is_signed);
+static_assert(std::numeric_limits<u32>::digits == 32 && !std::numeric_limits<u32>::is_signed);
+static_assert(std::numeric_limits<u64>::digits == 64 && !std::numeric_limits<u64>::is_signed);
+
+// C++20 mandates both, so neither can fire on a conforming compiler. They are
+// here because fx.hpp's rounding policy rests on ">> is a floor" and on I32_MIN
+// having no positive twin; a target that broke either would desync by one ULP
+// rather than fail visibly.
+static_assert(I32_MIN + I32_MAX == -1, "i32 must be two's complement");
+static_assert(I64_MIN + I64_MAX == -1, "i64 must be two's complement");
+static_assert((i32{ -1 } >> 1) == -1, "i32 >> must be arithmetic");
+static_assert((i64{ -1 } >> 1) == -1, "i64 >> must be arithmetic");
+
+// numeric_limits need not be specialised for __int128 outside GNU mode, and
+// this builds with -std=c++20 rather than gnu++20, so these use sizeof and a
+// sign probe. fx64.hpp separately checks that i128 >> is arithmetic, which the
+// standard does not cover for a vendor extension.
+static_assert(sizeof(i128) == 16 && sizeof(u128) == 16);
+static_assert(static_cast<i128>(-1) < 0, "i128 must be signed");
+static_assert(static_cast<u128>(-1) > 0, "u128 must be unsigned");
+
+// usize/isize are the one pair allowed to differ per target. Nothing in the sim
+// may store one, since a snapshot has to mean the same thing on both machines,
+// so only the relationship between them is fixed here.
+static_assert(sizeof(usize) == sizeof(void*));
+static_assert(sizeof(isize) == sizeof(usize));
+static_assert(!std::numeric_limits<usize>::is_signed);
+static_assert(std::numeric_limits<isize>::is_signed);
+
+// IEEE-754 binary32/binary64. Tooling and the renderer only; see below.
+static_assert(std::numeric_limits<f32>::is_iec559 && sizeof(f32) == 4);
+static_assert(std::numeric_limits<f64>::is_iec559 && sizeof(f64) == 8);
+
+// NUMERIC ALIASES ONLY. Nothing else belongs in this header.
+
 // This sits at the bottom of the include graph -- fx.hpp and strong_id.hpp
 // include it directly, and everything that touches a number in the sim reaches
 // it through one of those -- so whatever lands here is paid for by the whole

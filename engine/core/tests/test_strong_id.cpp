@@ -110,7 +110,7 @@ TEST_SUITE("core/strong_id") {
     CHECK(true);
   }
 
-  TEST_CASE("byte representation") {
+  TEST_CASE("strong_id: byte representation") {
     // strong_id.hpp static_asserts these for one probe instantiation. Restated
     // here for the real id types, since it is per-instantiation and these are
     // the ones that end up inside the snapshotted World.

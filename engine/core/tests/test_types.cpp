@@ -29,10 +29,18 @@ TEST_SUITE("core/types") {
   }
 
   TEST_CASE("architectural sizing guarantees") {
-    // while is_same_v checks the alias definition, these checks ensure
-    // the underlying types behave as expected for the target architecture.
+    // is_same_v above checks what the alias is DEFINED as. This case is about
+    // what the target then makes of it -- a different claim, and the one that
+    // breaks on a new platform rather than in a refactor.
+    //
+    // The full set now lives in types.hpp itself, under TARGET GUARANTEES:
+    // digits and signedness for all eight integer aliases, two's complement,
+    // arithmetic >>, the 128-bit pair, and IEEE-754 for f32/f64. It belongs
+    // there because a test only fails on a target the tests are RUN on. These
+    // two stay as the ctest-visible name for the property.
     static_assert(sizeof(moba::usize) == sizeof(moba::isize));
     static_assert(sizeof(moba::usize) == sizeof(void*));
+    CHECK(sizeof(moba::usize) == sizeof(void*));
   }
 
   TEST_CASE("floating point aliases") {

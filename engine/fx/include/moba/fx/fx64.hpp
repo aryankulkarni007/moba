@@ -116,7 +116,7 @@ struct [[nodiscard]] fx64 {
     return from_raw(static_cast<i64>(shifted));
   }
 
-  // Division by zero is the policy's one exception: no wrapping answer exists,
+  // division by zero is the policy's one exception: no wrapping answer exists,
   // so it clamps on the numerator's sign. The narrowing below is NOT an
   // exception and wraps like everything else.
   constexpr fx64 operator/(fx64 o) const noexcept {
@@ -143,7 +143,7 @@ struct [[nodiscard]] fx64 {
 
   constexpr fx64 operator*(fx v) const noexcept {
     // Q32.32 * Q16.16 is Q48.48; shift off the fx scale to land back in Q32.32.
-    const i128 shifted = (static_cast<i128>(raw) * v.raw) >> fx::SHIFT;
+    const i128 shifted = detail::unscale_fx(static_cast<i128>(raw) * v.raw);
     MOBA_ASSERT(detail::fits_i64(shifted));
     return from_raw(static_cast<i64>(shifted));
   }
@@ -287,14 +287,16 @@ static_assert(!std::is_aggregate_v<fx64>);
 // clamped and fx::operator* wrapped, the two paths returned raw 2147483647 and
 // raw 1111490560 for the same inputs.
 //
-// `>> 16` floors, matching fx::operator*. fx::operator*, narrow(mul_wide),
+// The shift is detail::unscale_fx, the same call fx::operator* makes, so the
+// two floor identically by construction rather than by agreement.
+// fx::operator*, narrow(mul_wide),
 // narrow(fx64 * fx64) and narrow(fx64 * fx) round identically on negatives --
 // measured across 6.8M products when the policy was chosen, and now held there
 // by "fx64: four-path rounding agreement" in test_fx64.cpp. Four paths is six
 // chances to disagree and a 1-ULP disagreement is a desync, so that test is
 // the one to run first after touching anything in this file.
 [[nodiscard]] constexpr fx narrow(fx64 v) noexcept {
-  const i64 shifted = v.raw >> (fx64::SHIFT - fx::SHIFT);
+  const i64 shifted = detail::unscale_fx(v.raw);
   MOBA_ASSERT(detail::fits_i32(shifted));
   return fx::from_raw(static_cast<i32>(shifted));
 }
@@ -322,8 +324,20 @@ static_assert(!std::is_aggregate_v<fx64>);
 
 /// narrow() that clamps instead of wrapping, for callers that want the edge.
 [[nodiscard]] constexpr fx narrow_sat(fx64 v) noexcept {
-  return fx::from_raw(detail::clamp_i32(v.raw >> (fx64::SHIFT - fx::SHIFT)));
+  return fx::from_raw(detail::clamp_i32(detail::unscale_fx(v.raw)));
 }
 // clang-format on
+
+// Matches the check in fx.hpp. The call sites here derive the shift as
+// fx64::SHIFT - fx::SHIFT, which equals fx::SHIFT only because Q32.32 is two
+// Q16.16 scale factors. Change either format and this fails at compile time.
+static_assert(
+    fx64::SHIFT - fx::SHIFT == 16, "detail::unscale_fx hardcodes this"
+);
+
+// The other half of the contract in fx.hpp. fx64 is checked here rather than
+// there because the include graph runs one way; fx.hpp does not know fx64
+// exists. A member added to fx and skipped on fx64 fails this line.
+static_assert(fixed_point<fx64>);
 
 }  // namespace moba

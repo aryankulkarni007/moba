@@ -17,10 +17,18 @@
 #
 # Two consequences bite, both about TEST_CASE names:
 #
-#   1. Two TEST_CASEs with the same name anywhere in the project collide into
-#      one ctest entry name and configure fails. That is why test_fx64.cpp
-#      prefixes its mirrored cases with `fx64: ` -- the two files deliberately
-#      test the same properties under the same names otherwise.
+#   1. Two TEST_CASEs with the same name anywhere in the project register two
+#      ctest entries with the SAME name. Configure does not fail, and neither
+#      does the run; what breaks is addressing them. `ctest -R 'that name'`
+#      matches both, in different binaries, and a summary line naming the
+#      failure does not say which file it came from. That is why test_fx64.cpp
+#      and test_vec2.cpp prefix their mirrored cases -- those files test the
+#      same properties as test_fx.cpp and would otherwise reuse its names.
+#
+#      To check: compare the entry count against the distinct-name count.
+#        ctest --preset debug -N | sed -n 's/.*Test *#[0-9]*: //p' | sort | uniq -d
+#      An earlier "byte representation" in both test_fx.cpp and
+#      test_strong_id.cpp was found exactly this way.
 #
 #   2. NO COMMAS IN TEST_CASE NAMES. doctest's discovery script escapes the
 #      comma for --test-case= but its follow-up --list-test-suites query comes
