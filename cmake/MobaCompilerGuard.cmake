@@ -18,7 +18,7 @@ if(
         set(_hint
             "On macOS /usr/bin/g++ and /usr/bin/gcc are Apple Clang. Install real GCC
   (brew install gcc) and point the preset at the versioned binary,
-  e.g. g++-15."
+  e.g. g++-16, and keep CMakePresets.json in step."
         )
     elseif(MOBA_EXPECT_COMPILER_ID STREQUAL "Clang")
         set(_hint

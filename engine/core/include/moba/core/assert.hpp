@@ -33,9 +33,9 @@
 //      on a failing constant evaluation, instead of the useless
 //      `read of non-constexpr variable __stderrp`.
 //
-//   4. <cstdio>/<cstdlib>/<source_location>/<string_view> are included inside
-//      the debug arm only. Hoisting them to the top of the file makes every
-//      release TU pay for headers it never uses.
+//   4. <cstdio>/<cstdlib>/<source_location> are included inside the debug arm
+//      only. Hoisting them to the top of the file makes every release TU pay
+//      for headers it never uses.
 
 // source_location beats __FILE__/__func__ on both counts: it names the macro-s
 // USE site, and function_name() gives the full signature (`int checked(int)`)
@@ -89,12 +89,17 @@ namespace moba::detail {
 #  define MOBA_ASSERT(cond) MOBA_ASSERT_MSG(cond, "")
 #endif
 
-// Tests live in engine/core/tests/test_core.cpp: both macros defined, true
+// Tests live in engine/core/tests/test_assert.cpp: both macros defined, true
 // condition does not abort, dangling-else safe, evaluation count (once in
 // debug, zero under NDEBUG), constexpr usability, and no -Wunused-variable
 // under NDEBUG. Both arms are exercised because the debug and release presets
 // build the same file.
 
 // TODO: [missing] Death test -- "does a failing assert actually abort". Needs a
-//       tiny separate executable driven from CMake with a ctest WILL_FAIL
-//       property; it cannot live in the doctest binary because it aborts.
+//       tiny separate executable driven from CMake, because it aborts and so
+//       cannot live in the doctest binary. moba_add_compile_fail_test() in
+//       MobaTest.cmake is the shape to copy, but NOT the mechanism: this is a
+//       run-time abort, not a compile error, so it wants a process that runs
+//       and dies. Match on the message assertion_failed prints, the same way
+//       the compile-fail tests match on the throw text -- a bare "non-zero
+//       exit" passes on a crash that is not the assert.

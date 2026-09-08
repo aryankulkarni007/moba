@@ -1,4 +1,5 @@
-# moba::fx -- Q16.16 / Q32.32 fixed point, angles, 2D vectors, shape predicates.
+# moba::fx -- Q16.16 / Q32.32 fixed point. Angles, 2D vectors and shape
+# predicates are specified in their headers but not yet written.
 #
 # Header-only (INTERFACE) so every operation can inline into the tick. Never
 # SHARED: that would block cross-TU inlining and risk a flag mismatch on the

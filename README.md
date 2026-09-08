@@ -15,7 +15,7 @@ agreement as the acceptance test.
 | CMake | >= 3.24 |
 | Ninja | any |
 | Clang | upstream LLVM. **Not Apple Clang** -- it reports `AppleClang` and the presets reject it (`brew install llvm`, put it ahead of `/usr/bin` on `PATH`) |
-| GCC | only for `gcc-release` (`brew install gcc`, gives `g++-15`) |
+| GCC | only for `gcc-release`. `brew install gcc` currently gives `g++-16`, which is what the preset names -- if brew moves on, update `CMakePresets.json` rather than working around it |
 
 The compiler check is deliberate: a golden hash produced by an unexpected
 compiler is not comparable with any other, so configure fails rather than
@@ -57,6 +57,21 @@ mismatch on the hot path, and a flag mismatch is a desync.
 
 ## Status
 
-Phase 0. `fx` and `fx64` exist and are under review; `angle`, `vec2`, `shapes`,
-`isqrt`, `strong_id` are specifications only. Open work is tracked as `TODO:`
-comments in the headers -- `grep -rn TODO engine`.
+Phase 0.
+
+| | |
+|---|---|
+| `core/types`, `core/assert`, `core/strong_id` | written, tested |
+| `fx`, `fx64` | written, tested -- including the four-path rounding agreement and a golden hash per width |
+| `core/result` | spec only, deliberately. First caller is phase 2 |
+| `fx/isqrt`, `fx/angle`, `fx/vec2`, `fx/shapes` | spec only. This is the critical path |
+
+Open work is tracked two ways: `TODO.md` for anything spanning more than one
+file, and `TODO:` comments in the headers for everything else --
+`grep -rn "TODO:" engine`. Each comment carries a tag saying what kind of
+decision it is: `[missing]`, `[decide]`, `[sequencing]`, `[duplication]`.
+
+The determinism claim rests on the golden hashes in `test_fx.cpp` and
+`test_fx64.cpp`. Each folds ~100k mixed operations into one committed
+constant, and every CI row -- x86-64 and AArch64, Clang and GCC, every preset
+-- checks that same constant. Two rows disagreeing is a red build.

@@ -39,10 +39,12 @@
 // every i32 converts to double exactly, and dividing by 2^16 only changes the
 // exponent.
 
-// test_fx.cpp includes this header, which is what compiles it: moba_fx is an
-// INTERFACE library and FILE_SET HEADERS is IDE metadata, not a compile. Keep
-// that include -- drop it and a break here ships silently, and doctest goes
-// back to printing `CHECK( {?} == {?} )`.
+// test_fx.cpp and test_fx64.cpp include this header, which is what compiles it:
+// moba_fx is an INTERFACE library and FILE_SET HEADERS is IDE metadata, not a
+// compile. Keep those includes -- drop them and a break here ships silently,
+// and doctest goes back to printing `CHECK( {?} == {?} )`. The same trap
+// applies to every header in the project; strong_id.hpp went unchecked for
+// exactly this reason until test_strong_id.cpp was written.
 
 // TODO: [missing] vec2 and angle formatters, once those exist.
 

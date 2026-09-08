@@ -65,7 +65,8 @@ function(moba_apply_compile_settings target)
         # address  -- heap/stack/global overflow, use-after-free,
         #             use-after-return, use-after-scope.
         # undefined -- the UBSan group. The members that matter here:
-        #     integer-divide-by-zero  (fx::operator/ has no guard yet)
+        #     integer-divide-by-zero  (fx and fx64 both guard operator/
+    #                              now, but nothing outside them does)
         #     shift                   (fixed point is made of shifts; a shift
         #                              count >= width or a shift of a negative
         #                              value is UB and silently differs
@@ -116,7 +117,11 @@ function(moba_apply_compile_settings target)
     #                            -Wconversion covers the accidental ones.
     # signed-integer-overflow    Suppressed by -fwrapv, by design. Consequence:
     #                            UBSan will NOT catch fx overflow. The debug
-    #                            asserts inside fx are the only net. Write them.
+    #                            asserts inside fx and fx64 are the only net,
+    #                            and they are written -- every operator on both
+    #                            types checks its result fits before storing.
+    #                            Any new arithmetic here needs the same, or it
+    #                            has no overflow detection at all.
     # MemorySanitizer            Unsupported on Darwin; needs an instrumented
     #                            stdlib.
     # ThreadSanitizer            No threads by design, and cannot combine with

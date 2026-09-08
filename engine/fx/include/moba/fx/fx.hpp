@@ -83,10 +83,13 @@ template <typename T>
  * which breaks the moment anyone swaps one for the other, and bakes itself
  * into any golden hash recorded before the swap.
  *
- * Two properties the policy buys. Both were verified exhaustively when it was
- * chosen; NEITHER is pinned by a test yet -- see the fx test TODOs:
+ * Two properties the policy buys, both verified exhaustively when it was
+ * chosen:
  *     a * from_ratio(1,2) == a / from_int(2)      same math, same answer
  *     a / from_int(1 << k) == from_raw(a.raw >> k)
+ * What holds them there now is the four-path agreement sweep in
+ * test_fx64.cpp, which pins every spelling of a fixed-point multiply against
+ * every other, plus the golden hashes in both test files.
  *
  * One property it gives up, knowingly: floor is not odd-symmetric, so
  * a / b != -((-a) / b) for negative inexact results. Truncation keeps that
@@ -181,9 +184,13 @@ struct [[nodiscard]] fx {
   }
 
   // TODO: [duplication] This is mul_wide() + narrow() open-coded. fx64.hpp
-  //       includes fx.hpp so it cannot be reused directly. Either accept it
-  //       and property-test that the two agree (that test is on the exit
-  //       criteria anyway), or move the shift to a shared detail header.
+  //       includes fx.hpp so it cannot be reused directly. The two options
+  //       were: accept the duplication and property-test that the spellings
+  //       agree, or move the shift to a shared detail header. The test route
+  //       is taken -- "fx64: four-path rounding agreement" in test_fx64.cpp
+  //       pins this against narrow(mul_wide(a,b)) and both fx64 multiplies
+  //       over a signed sweep. Deduping is still open, but it is now a
+  //       tidiness question rather than a correctness one.
   constexpr fx operator*(fx o) const noexcept {
     // both sides are 65536 too big -> widen to 64 bits then shift off one
     // factor. The i64 product maxes at 2^62, so it cannot itself overflow.
@@ -397,12 +404,29 @@ static_assert(!std::is_aggregate_v<fx>);  // pins the `fx a{ 4 }` fix above
  * runtime surprise -- unlike from_int, which wraps silently. The integer-part
  * check is what bounds the result: MAX_INT << SHIFT is 2147418112, the
  * fraction is always less than 65536, and the two sum to exactly I32_MAX. A
- * literal that passes the integer check cannot overflow, so no second range
- * check is needed once the fraction is added.
+ * literal that passes the integer check cannot overflow. The range check after
+ * the fraction is added is therefore unreachable today; it is kept as a
+ * backstop against a future edit to the fraction path breaking that argument,
+ * and it is cost-free because all of this is consteval.
  *
- * FRAC_DIGIT_CAP earns its place twice: it keeps num << SHIFT inside u64, and
- * one ULP is about 1.5e-5, so digits past the seventh cannot move the result.
- * Extra digits are consumed and ignored rather than rejected. */
+ * FRAC_DIGIT_CAP is what keeps num << SHIFT inside u64: nine digits gives
+ * num < 10^9, and 10^9 << 16 is about 6.6e13, comfortably under 1.8e19. Extra
+ * digits are consumed and ignored rather than rejected.
+ *
+ * Truncating them is NOT free, and the earlier note here claiming "digits past
+ * the seventh cannot move the result" was wrong. One ULP is 1/65536 =
+ * 0.0000152587890625 -- sixteen decimal digits, all significant. Dropping
+ * digits shrinks a non-negative magnitude, so the result can land one ULP low:
+ *
+ *       0.0000152587890625_fx    exactly one ULP, but parses to raw 0
+ *       fx::EPSILON              raw 1
+ *
+ * The bound is one ULP and only literals with more than nine fractional digits
+ * are affected, which is why this is documented rather than fixed -- raising
+ * the cap needs u128 in the accumulator, and changing it would move the value
+ * of any such literal and invalidate every golden hash recorded before the
+ * change. from_ratio(1, 65536) is the exact spelling. Pinned by
+ * "_fx literal: digits past FRAC_DIGIT_CAP are dropped" in test_fx.cpp. */
 namespace detail {
 // Two return values, so it needs a type. A named struct rather than std::pair:
 // <utility> is ~10000 preprocessed lines and this is its only caller.
@@ -459,7 +483,10 @@ consteval fx operator""_fx(const char* s) {
   }
   if (p != end)
     throw "fx literal: only decimal digits and one '.' are supported";
-  if (raw > static_cast<u64>(INT32_MAX)) throw "fx literal: out of fx range";
+  // unreachable given the integer-part check above; see RANGE in the block
+  // comment. I32_MAX, not the INT32_MAX macro -- this file spells its limits
+  // through <moba/core/types.hpp> everywhere else.
+  if (raw > static_cast<u64>(I32_MAX)) throw "fx literal: out of fx range";
 
   return fx::from_raw(static_cast<i32>(raw));
 }

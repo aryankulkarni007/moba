@@ -167,8 +167,12 @@ TEST_SUITE("fx/fx") {
   }
 
   TEST_CASE("golden hash sequence") {
-    // hash state simulating ~100k determinism tests.
-    // must be identical across gcc, clang, msvc in release and debug.
+    // ~100k mixed operations folded into one constant. That constant is
+    // committed ONCE, and every CI row -- both architectures, both compilers,
+    // every preset -- checks this same value, so cross-platform agreement is
+    // enforced by ctest with no artefact comparison anywhere.
+    //
+    // Not MSVC: types.hpp #errors without __int128, which MSVC lacks.
     u32  hash = 0x811c9dc5;  // FNV-1a basis
     auto fnv  = [&hash](i32 raw) {
       hash ^= static_cast<u32>(raw);
@@ -185,6 +189,165 @@ TEST_SUITE("fx/fx") {
     }
 
     CHECK(hash == 0x6B78D1DC);
+  }
+
+  TEST_CASE("free functions") {
+    SUBCASE("abs") {
+      CHECK(abs(fx::from_int(-5)) == fx::from_int(5));
+      CHECK(abs(fx::from_int(5)) == fx::from_int(5));
+      CHECK(abs(fx::ZERO) == fx::ZERO);
+      CHECK(abs(fx::from_raw(-1)) == fx::from_raw(1));
+      // abs(fx::MIN) is not representable and asserts; not exercised here.
+    }
+
+    SUBCASE("min and max") {
+      const fx lo = fx::from_int(-5);
+      const fx hi = fx::from_int(2);
+      CHECK(min(lo, hi) == lo);
+      CHECK(min(hi, lo) == lo);
+      CHECK(max(lo, hi) == hi);
+      CHECK(max(hi, lo) == hi);
+      CHECK(min(fx::MIN, fx::MAX) == fx::MIN);
+      CHECK(max(fx::MIN, fx::MAX) == fx::MAX);
+    }
+
+    SUBCASE("clamp") {
+      const fx lo = fx::from_int(-1);
+      const fx hi = fx::from_int(1);
+      CHECK(clamp(fx::from_int(5), lo, hi) == hi);
+      CHECK(clamp(fx::from_int(-5), lo, hi) == lo);
+      CHECK(clamp(fx::ZERO, lo, hi) == fx::ZERO);
+      // boundaries are inclusive
+      CHECK(clamp(lo, lo, hi) == lo);
+      CHECK(clamp(hi, lo, hi) == hi);
+    }
+
+    SUBCASE("sign") {
+      CHECK(sign(fx::from_int(3)) == 1);
+      CHECK(sign(fx::from_int(-3)) == -1);
+      CHECK(sign(fx::ZERO) == 0);
+      CHECK(sign(fx::EPSILON) == 1);
+      CHECK(sign(fx::from_raw(-1)) == -1);
+    }
+
+    SUBCASE("floor, ceil, round -- the negative half is the whole test") {
+      // On positives every rounding rule agrees, so only negatives distinguish
+      // them. -0.5 is the case where all three answers differ.
+      const fx neg_half = fx::from_ratio(-1, 2);
+      CHECK(floor(neg_half) == fx::from_int(-1));
+      CHECK(ceil(neg_half) == fx::ZERO);
+      CHECK(round(neg_half) == fx::ZERO);  // halves upward
+
+      const fx pos_half = fx::from_ratio(1, 2);
+      CHECK(floor(pos_half) == fx::ZERO);
+      CHECK(ceil(pos_half) == fx::ONE);
+      CHECK(round(pos_half) == fx::ONE);
+
+      // exact whole numbers are fixed points of all three
+      CHECK(floor(fx::from_int(3)) == fx::from_int(3));
+      CHECK(ceil(fx::from_int(3)) == fx::from_int(3));
+      CHECK(round(fx::from_int(3)) == fx::from_int(3));
+      CHECK(floor(fx::from_int(-3)) == fx::from_int(-3));
+      CHECK(ceil(fx::from_int(-3)) == fx::from_int(-3));
+      CHECK(round(fx::from_int(-3)) == fx::from_int(-3));
+
+      // floor(v) agrees with the member floor_to_int()
+      for (i32 r = I32_MIN + 65413; r < I32_MAX - 65413; r += 65413) {
+        const fx v = fx::from_raw(r);
+        CHECK(floor(v).floor_to_int() == v.floor_to_int());
+      }
+    }
+
+    SUBCASE("frac is always in [0, 1), including for negatives") {
+      // The identity that pins it: floor(v) + frac(v) == v for EVERY v.
+      // frac(-0.25) is 0.75, not -0.25.
+      CHECK(frac(fx::from_ratio(-1, 4)) == fx::from_ratio(3, 4));
+      CHECK(frac(fx::from_ratio(1, 4)) == fx::from_ratio(1, 4));
+      CHECK(frac(fx::from_int(3)) == fx::ZERO);
+      CHECK(frac(fx::from_int(-3)) == fx::ZERO);
+
+      for (i32 r = I32_MIN + 65413; r < I32_MAX - 65413; r += 65413) {
+        const fx v = fx::from_raw(r);
+        CHECK(frac(v).raw >= 0);
+        CHECK(frac(v) < fx::ONE);
+        CHECK(floor(v) + frac(v) == v);
+      }
+    }
+
+    SUBCASE("lerp hits both endpoints exactly") {
+      // The reason lerp is written a + (b - a) * t and not a*(1-t) + b*t.
+      // Only this form gives both endpoints exactly, and that is an exit
+      // criterion -- an interpolation that overshoots its own endpoint by a
+      // ULP puts an entity past the wall it was moving toward.
+      const fx a = fx::from_int(-3);
+      const fx b = fx::from_int(5);
+      CHECK(lerp(a, b, fx::ZERO) == a);
+      CHECK(lerp(a, b, fx::ONE) == b);
+      CHECK(lerp(a, b, fx::from_ratio(1, 2)) == fx::from_int(1));
+      // degenerate: a == b is constant for every t
+      CHECK(lerp(a, a, fx::from_ratio(1, 3)) == a);
+    }
+  }
+
+  TEST_CASE("saturating arithmetic") {
+    // Opt-in and named. These do NOT assert: clamping is the requested
+    // behaviour here, not a bug being reported, so both build arms run the
+    // same code and the overflow cases are exercised in debug too.
+    SUBCASE("add_sat and sub_sat") {
+      CHECK(add_sat(fx::MAX, fx::ONE) == fx::MAX);
+      CHECK(add_sat(fx::MIN, -fx::ONE) == fx::MIN);
+      CHECK(sub_sat(fx::MIN, fx::ONE) == fx::MIN);
+      CHECK(sub_sat(fx::MAX, -fx::ONE) == fx::MAX);
+      // in range, they are plain arithmetic
+      CHECK(add_sat(fx::from_int(2), fx::from_int(3)) == fx::from_int(5));
+      CHECK(sub_sat(fx::from_int(2), fx::from_int(3)) == fx::from_int(-1));
+    }
+
+    SUBCASE("mul_sat") {
+      CHECK(mul_sat(fx::MAX, fx::from_int(2)) == fx::MAX);
+      CHECK(mul_sat(fx::MIN, fx::from_int(2)) == fx::MIN);
+      CHECK(mul_sat(fx::MAX, -fx::ONE) == fx::from_raw(-I32_MAX));
+      CHECK(mul_sat(fx::from_int(3), fx::from_int(4)) == fx::from_int(12));
+    }
+
+    SUBCASE("div_sat") {
+      // Division by zero clamps on the numerator's sign in BOTH arms here --
+      // unlike operator/, which asserts first.
+      CHECK(div_sat(fx::from_int(10), fx::ZERO) == fx::MAX);
+      CHECK(div_sat(fx::from_int(-10), fx::ZERO) == fx::MIN);
+      CHECK(div_sat(fx::ZERO, fx::ZERO) == fx::MAX);  // 0 counts as >= 0
+      // a quotient too large for the storage
+      CHECK(div_sat(fx::MAX, fx::EPSILON) == fx::MAX);
+      CHECK(div_sat(fx::MIN, fx::EPSILON) == fx::MIN);
+      // in range
+      CHECK(div_sat(fx::from_int(12), fx::from_int(4)) == fx::from_int(3));
+    }
+
+    SUBCASE("saturating agrees with plain arithmetic in range") {
+      // Whatever the _sat forms do at the edges, inside the range they must be
+      // the same function -- otherwise swapping one for the other is a desync.
+      for (i32 i = -64; i <= 64; ++i) {
+        const fx a = fx::from_raw((i * 7919) - 3);
+        const fx b = fx::from_raw((i * 1013) + 7);
+        CHECK(add_sat(a, b) == a + b);
+        CHECK(sub_sat(a, b) == a - b);
+        CHECK(mul_sat(a, b) == a * b);
+        if (b.raw != 0) CHECK(div_sat(a, b) == a / b);
+      }
+    }
+  }
+
+  TEST_CASE("byte representation") {
+    // The static_asserts in fx.hpp already fail the build if any of this
+    // breaks. Restated as a runtime case so ctest names the property that the
+    // rollback snapshot and the desync fingerprint both depend on.
+    static_assert(sizeof(fx) == 4);
+    static_assert(alignof(fx) == 4);
+    static_assert(std::is_trivially_copyable_v<fx>);
+    static_assert(std::is_standard_layout_v<fx>);
+    static_assert(std::has_unique_object_representations_v<fx>);
+    static_assert(!std::is_aggregate_v<fx>);  // pins `fx a{ 4 }` failing
+    CHECK(sizeof(fx) == 4);
   }
 
   // clang-format off
@@ -230,9 +393,17 @@ TEST_SUITE("fx/fx") {
   }
 
   TEST_CASE("_fx literal: digits past FRAC_DIGIT_CAP are dropped") {
-    // One ULP is about 1.5e-5, so the tenth decimal cannot move the result.
     // Pins that the extra digits are consumed and ignored, not rejected.
     static_assert((0.123456789012_fx).raw == (0.123456789_fx).raw);
+
+    // ...and pins the price of that, which is NOT zero. One ULP is
+    // 0.0000152587890625 -- sixteen significant digits -- so truncating at
+    // nine can land one ULP low. This literal IS exactly fx::EPSILON and
+    // parses to zero. Documented, bounded at 1 ULP, and only reachable with
+    // more than nine fractional digits; from_ratio is the exact spelling.
+    // See THE _fx LITERAL in <moba/fx/fx.hpp>.
+    static_assert((0.0000152587890625_fx).raw == 0);
+    static_assert(fx::from_ratio(1, 65536).raw == 1);
   }
 
   TEST_CASE("_fx literal: the sign is applied AFTER the literal") {
@@ -271,51 +442,17 @@ TEST_SUITE("fx/fx") {
   // clang-format on
 }
 
-// TODO: The real suite. What each test must prove, not how to write it.
-//       Several will FAIL against current code - that is the point. Write the
-//       test, watch it fail, then fix the matching TODO in fx.hpp.
+// What this file does NOT cover, deliberately:
 //
-//   round-trip     from_int(n).to_int() == n over the stated range; the test
-//                  must state that range. Doubles as the from_int overflow
-//                  regression. from_raw round-trips 0, 1, -1, INT32_MIN/MAX.
+//   associativity  (a*b)*c != a*(b*c) is EXPECTED in fixed point -- each
+//                  multiply floors, so the two groupings lose different bits.
+//                  Asserting it would be asserting a bug.
 //
-//   rounding       The important one. On NEGATIVE operands whose exact product
-//                  has a fraction, assert all three agree:
-//                      a * b
-//                      narrow(mul_wide(a, b))
-//                      narrow(fx64{a} * fx64{b})
-//                  Then prove the direction is floor, not trunc-toward-zero,
-//                  with a case where they differ. Positive-only operands make
-//                  the two identical and prove nothing.
-//                  Same for to_int on negatives: to_int(-0.5) == -1.
+//   from_int out of range  from_int(32768) wraps silently in release and
+//                  asserts in debug, so there is no single answer to check.
+//                  The _fx literal is the spelling that rejects out-of-range
+//                  values at compile time; that is what compile_fail/ pins.
 //
-//   compound       `fx c = a; c OP= b;` == `a OP b` for every operator. Fails
-//                  today for *= and /=. Include 2 *= 3 specifically - it
-//                  gives raw 0, which is why it is invisible without a test.
-//
-//   division       div by zero: positive numerator -> INT32_MAX, negative ->
-//                  INT32_MIN, zero -> whatever you decide. Debug aborts
-//                  instead; test one configuration and say which.
-//                  INT32_MIN / -1. (a / b) * b within a named ULP tolerance.
-//
-//   algebra        a * b == b * a exactly, including negatives. Identities,
-//                  a - a == 0, -(-a) == a.
-//                  NOT associativity - (a*b)*c != a*(b*c) in fixed point is
-//                  expected. If tempted, leave a comment saying why not.
-//
-//   ordering       <=> agrees with raw ordering across the sign boundary.
-//
-//   constexpr      static_assert block exercising each operator. Finds
-//                  operations that are constexpr in name only. Free.
-//
-//   vs double      Loose tolerance, few thousand sampled pairs. CORRECTNESS
-//                  test, not determinism - it catches gross sign/shift errors
-//                  only. Say so in a comment so nobody tightens it later into
-//                  a flaky cross-platform failure.
-//
-//   golden hash    ~100k mixed ops over a fixed operand sequence including
-//                  negatives, zero and boundaries, folded into one hash.
-//                  Sequence generated from a fixed seed (reproducible, no data
-//                  file). Expected hash is one named constant. Must be
-//                  identical under debug, release and gcc-release.
-//                  Until gcc-release runs on real GCC it is clang vs clang.
+//   fx64 interop   lives in test_fx64.cpp, together with the four-path
+//                  rounding agreement between fx::operator*, mul_wide/narrow
+//                  and the two fx64 multiplies.

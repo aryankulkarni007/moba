@@ -6,41 +6,75 @@ on:
   pull_request:
   workflow_dispatch:
 
+# What this matrix is actually testing, axis by axis. Every one of these is a
+# way two machines can disagree, and disagreement is the one bug class this
+# project cannot ship:
+#
+#   architecture   x86-64 vs AArch64. THE axis. The only real determinism bug
+#                  found so far was the _fx literal going through `long
+#                  double`, which is an 80-bit x87 extended on x86-64 and a
+#                  128-bit quad on AArch64. It was found by reading the
+#                  standard, not by CI, because until now CI was x86-64 only.
+#   compiler       Clang vs GCC. Different codegen, different constant folding.
+#   optimisation   Debug vs Release. A value folded at compile time and a value
+#                  computed at run time must agree.
+#   standard lib   libstdc++ (Linux) vs libc++ (macOS). Matters for
+#                  <format> in format.hpp; nothing in fx/ or core/ touches the
+#                  library otherwise, which is deliberate.
+#
+# Not tested, and why: MSVC. types.hpp #errors without __int128, which MSVC
+# does not have, and fx64::operator* has no fallback. Windows support would be
+# a port, not a CI job.
+#
+# The golden hashes are what turn all of this into a determinism test rather
+# than a compile test. test_fx.cpp and test_fx64.cpp each fold ~100k mixed
+# operations into one constant that is committed ONCE in the source. Every job
+# below checks the same constant, so any two rows disagreeing is a red build --
+# no artefact collection or cross-job comparison needed. Adding a preset or an
+# architecture extends the determinism check for free.
+
 jobs:
-  # Every preset must build and every test must pass. The gcc job is not
-  # redundant with the clang jobs: cross-compiler agreement IS the determinism
-  # test, and on macOS /usr/bin/g++ is Apple Clang, so Linux CI is where that
-  # check actually happens today.
-  build:
-    name: ${{ matrix.preset }}
-    runs-on: ubuntu-24.04
+  linux:
+    name: ${{ matrix.preset }} / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        # ubuntu-24.04-arm is GitHub's AArch64 runner: free for public repos,
+        # billed for private ones. If this repo goes private and the arm rows
+        # need to go, say so here rather than deleting them silently -- the
+        # cross-architecture check is the point of the whole matrix.
+        arch: [x86-64, arm64]
+        preset: [debug, release, release-san, gcc-release]
         include:
-          - preset: debug
-            packages: clang-18
-            cxx: clang++-18
-          - preset: release
-            packages: clang-18
-            cxx: clang++-18
-          - preset: release-san
-            packages: clang-18
-            cxx: clang++-18
-          - preset: gcc-release
-            packages: g++-14
-            cxx: g++-14
+          - arch: x86-64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - uses: actions/checkout@v4
 
+      # Both compilers on every runner. The presets pin a compiler ID and the
+      # guard in MobaCompilerGuard.cmake fails configure on a mismatch, so
+      # installing both costs a few seconds and removes a matrix dimension.
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build ${{ matrix.packages }}
+          sudo apt-get install -y ninja-build clang-18 g++-14
 
+      # The presets name `clang++` and `g++-16` -- what a developer has on
+      # PATH. CI overrides with the versions Ubuntu 24.04 actually ships. The
+      # override changes the binary, never the compiler ID, so the guard still
+      # does its job.
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+        run: |
+          if [ "${{ matrix.preset }}" = "gcc-release" ]; then
+            CXX=g++-14
+          else
+            CXX=clang++-18
+          fi
+          cmake --preset ${{ matrix.preset }} -DCMAKE_CXX_COMPILER=$CXX
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -48,19 +82,31 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
 
-  # TODO: The job that actually matters, once the golden hash test exists.
-  #
-  # Building three presets green proves the code compiles three ways. It does
-  # not prove they agree. This job must:
-  #   - run the golden-hash test binary under each preset
-  #   - capture the hash it prints
-  #   - fail if the three values are not byte-identical
-  #
-  # That is the phase 0 exit criterion, and it cannot be expressed as "ctest
-  # passed" in three separate jobs -- each job would be checking against its
-  # own committed constant, which is exactly the failure this is meant to
-  # catch. The comparison has to happen in one place, across artefacts.
-  #
-  # determinism:
-  #   needs: build
-  #   ...
+  # macOS is the development platform and the only libc++ coverage in the
+  # matrix. Apple Clang is rejected on purpose -- it reports AppleClang, has
+  # different codegen, and a golden hash produced by it is not comparable with
+  # any other -- so this installs upstream LLVM and points the preset at it.
+  macos:
+    name: ${{ matrix.preset }} / macos-arm64
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [debug, release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: brew install ninja llvm
+
+      - name: Configure
+        run: |
+          cmake --preset ${{ matrix.preset }} \
+            -DCMAKE_CXX_COMPILER="$(brew --prefix llvm)/bin/clang++"
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}

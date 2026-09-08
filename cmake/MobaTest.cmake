@@ -5,8 +5,20 @@
 #
 #   moba_add_test(test_fx SOURCES test_fx.cpp test_fx64.cpp LIBS moba::fx)
 #
-# Each TEST_CASE becomes its own ctest entry, so `ctest -R "fx::mul"` works and
-# a failure names the case rather than the binary.
+# Each TEST_CASE becomes its own ctest entry, so a failure names the case
+# rather than the binary.
+#
+# NOTE on selecting tests: doctest_discover_tests registers each entry under the
+# TEST_CASE name ALONE. The TEST_SUITE becomes a ctest LABEL, not part of the
+# name, so `ctest -R` matches case names and `ctest -L` matches suites:
+#
+#   ctest --preset debug -L 'fx/fx64'      whole suite
+#   ctest --preset debug -R 'four-path'    one case
+#
+# The consequence that bites: two TEST_CASEs with the same name anywhere in the
+# project collide into one ctest entry name and configure fails. That is why
+# test_fx64.cpp prefixes its mirrored cases with `fx64: ` -- the two files
+# deliberately test the same properties under the same names otherwise.
 
 include(FetchContent)
 
@@ -70,14 +82,76 @@ function(moba_add_test target)
     endif()
 endfunction()
 
-function(moba_add_compile_fail_test target source)
-    add_executable(i${target} EXCLUDE_FROM_ALL ${source})
-    target_link_libraries(i${target} PRIVATE moba::options ${ARGN})
+# A test that passes only when a translation unit FAILS to compile, for the
+# specific reason named in EXPECT.
+#
+#   moba_add_compile_fail_test(fx_lit_hex
+#       SOURCE  compile_fail/lit_hex.cpp
+#       EXPECT  "only decimal digits"
+#       LIBS    moba::fx
+#   )
+#
+# EXPECT is required, and it is the whole point of the helper. The obvious
+# spellings -- WILL_FAIL, or PASS_REGULAR_EXPRESSION "FAIL" against ninja's
+# `FAILED:` line -- both pass on ANY compile error, so a renamed header, a
+# typo in the test file, or an unrelated -Werror hit all read as green. That
+# was measured, not assumed: replacing lit_hex.cpp with `int main() { this is
+# not c++ ; }` left fx_lit_hex passing.
+#
+# What makes EXPECT work is that the rejections in fx.hpp are `throw` in a
+# consteval function, and both compilers echo the throw's source line -- string
+# literal included -- in the diagnostic:
+#
+#   clang  note:  subexpression not valid in a constant expression
+#            461 |     throw "fx literal: only decimal digits ...";
+#   gcc    error: expression '<throw-expression>' is not a constant expression
+#            461 |     throw "fx literal: only decimal digits ...";
+#
+# so a substring of the message pins WHICH guard fired. Keep EXPECT free of
+# regex metacharacters (no '.', no parens) and short enough to survive a
+# reworded message being noticed rather than silently un-matching.
+#
+# Two CTest properties are doing load-bearing work:
+#
+#   PASS_REGULAR_EXPRESSION  documented to IGNORE the process exit code, so it
+#       replaces WILL_FAIL rather than combining with it. Do not set both --
+#       WILL_FAIL would invert the result of the regex match.
+#   RESOURCE_LOCK  these tests invoke `cmake --build` on the build tree ctest
+#       was itself launched from. Under `ctest -j` two of them would otherwise
+#       run concurrent ninja invocations against one build directory. The lock
+#       serialises them against each other.
+#
+# The target is prefixed rather than sharing the test's name, so `--target
+# cf_foo` inside a test named `foo` reads unambiguously.
+function(moba_add_compile_fail_test target)
+    cmake_parse_arguments(ARG "" "SOURCE;EXPECT" "LIBS" ${ARGN})
+
+    if(NOT ARG_SOURCE)
+        message(FATAL_ERROR "moba_add_compile_fail_test(${target}): SOURCE is required")
+    endif()
+    if(NOT ARG_EXPECT)
+        message(
+            FATAL_ERROR
+            "moba_add_compile_fail_test(${target}): EXPECT is required. A "
+            "compile-fail test with no expected diagnostic passes on any "
+            "compile error at all, including ones the test is not about."
+        )
+    endif()
+
+    add_executable(cf_${target} EXCLUDE_FROM_ALL ${ARG_SOURCE})
+    target_link_libraries(cf_${target} PRIVATE moba::options ${ARG_LIBS})
+
     add_test(
         NAME ${target}
         COMMAND
-            ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target i${target}
+            ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target cf_${target}
             --config $<CONFIG>
     )
-    set_tests_properties(${target} PROPERTIES PASS_REGULAR_EXPRESSION "FAIL")
+    set_tests_properties(
+        ${target}
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "${ARG_EXPECT}"
+            RESOURCE_LOCK moba_build_tree
+            LABELS compile_fail
+    )
 endfunction()

@@ -1,4 +1,6 @@
-# moba::core -- fundamental types, assertions, fixed-capacity containers.
+# moba::core -- fundamental types, assertions, type-safe ids.
+#
+# Fixed-capacity containers land here too, when something needs one.
 #
 # Header-only (INTERFACE): every consumer -- sim, net, platform -- wants the
 # integer aliases without dragging in a maths library, and INTERFACE keeps this

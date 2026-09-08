@@ -187,10 +187,10 @@ struct [[nodiscard]] fx64 {
   constexpr fx64& operator/=(i32 n)  noexcept { *this = *this / n; return *this; }
   // clang-format on
 
-  // TODO: [decide] No operator/(fx). Dividing a Q32.32 total by a Q16.16
-  //       factor has no caller yet, and the shift direction is the opposite of
-  //       operator*(fx) so it is not a copy-paste. Add it when something needs
-  //       it, not before.
+  // TODO: [sequencing] No operator/(fx). Not an open question -- the answer is
+  //       "not yet". Dividing a Q32.32 total by a Q16.16 factor has no caller,
+  //       and the shift direction is the opposite of operator*(fx) so it is
+  //       not a copy-paste. Add it when something needs it, not before.
 
   /* COMPARISON */
 
@@ -209,7 +209,16 @@ inline constexpr fx64 fx64::EPSILON = fx64::from_raw(1);      // one ULP
 inline constexpr fx64 fx64::MIN     = fx64::from_raw(I64_MIN);
 inline constexpr fx64 fx64::MAX     = fx64::from_raw(I64_MAX);
 
-/// `3 * v` as well as `v * 3`, and `a + b` however the operands are ordered.
+/// Reversed spellings of the COMMUTATIVE operators only: `3 * v` as well as
+/// `v * 3`, `a + b` as well as `b + a`. Each one forwards to the member, so
+/// there is one implementation and the two orders cannot drift.
+///
+/// There is deliberately no operator-(fx, fx64) and no operator/(i32, fx64).
+/// Subtraction and division do not commute, so those cannot forward -- each
+/// would be a second implementation of the arithmetic, which is exactly the
+/// two-spellings-that-disagree shape that the rounding policy exists to
+/// prevent. Consequence to know about: `f + acc` compiles and `f - acc` does
+/// not. Spell it `-(acc - f)` or widen explicitly.
 [[nodiscard]] constexpr fx64 operator*(i32 n, fx64 v) noexcept { return v * n; }
 [[nodiscard]] constexpr fx64 operator*(fx a, fx64 b)  noexcept { return b * a; }
 [[nodiscard]] constexpr fx64 operator+(fx a, fx64 b)  noexcept { return b + a; }
@@ -280,13 +289,11 @@ static_assert(!std::is_aggregate_v<fx64>);
 // raw 1111490560 for the same inputs.
 //
 // `>> 16` floors, matching fx::operator*. fx::operator*, narrow(mul_wide),
-// narrow(fx64 * fx64) and narrow(fx64 * fx) were measured to round identically
-// on negatives across 6.8M products, so they do agree today -- but nothing in
-// the suite holds them there.
-//
-// TODO: [missing] Pin all four paths against each other in test_fx64.cpp. Four
-//       paths, six chances to disagree, and a 1-ULP disagreement is a desync.
-//       Highest-value test in the fx suite.
+// narrow(fx64 * fx64) and narrow(fx64 * fx) round identically on negatives --
+// measured across 6.8M products when the policy was chosen, and now held there
+// by "fx64: four-path rounding agreement" in test_fx64.cpp. Four paths is six
+// chances to disagree and a 1-ULP disagreement is a desync, so that test is
+// the one to run first after touching anything in this file.
 [[nodiscard]] constexpr fx narrow(fx64 v) noexcept {
   const i64 shifted = v.raw >> (fx64::SHIFT - fx::SHIFT);
   MOBA_ASSERT(detail::fits_i32(shifted));
