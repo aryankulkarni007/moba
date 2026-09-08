@@ -8,7 +8,6 @@
 # to happen.
 
 function(moba_apply_compile_settings target)
-
     # --- Warnings ----------------------------------------------------------
     #
     # Deliberately NOT here: -Wpedantic. It rejects __int128, which fx64
@@ -16,11 +15,11 @@ function(moba_apply_compile_settings target)
     set(_warnings
         -Wall
         -Wextra
-        -Wconversion         # silent narrowing is how fixed-point maths dies
+        -Wconversion # silent narrowing is how fixed-point maths dies
         -Wsign-conversion
         -Wshadow
-        -Wold-style-cast     # this is C++, not C
-        -Wdouble-promotion   # catches accidental float in the simulation
+        -Wold-style-cast # this is C++, not C
+        -Wdouble-promotion # catches accidental float in the simulation
         -Wnon-virtual-dtor
         -Wcast-align
         -Wunused
@@ -36,9 +35,9 @@ function(moba_apply_compile_settings target)
     #
     # Determinism-relevant. Do not change without regenerating golden hashes.
     set(_codegen
-        -fwrapv              # signed overflow wraps, defined, identical everywhere
-        -ffp-contract=off    # no FMA contraction; keeps the double reference
-                             # comparison meaningful across compilers
+        -fwrapv # signed overflow wraps, defined, identical everywhere
+        -ffp-contract=off # no FMA contraction; keeps the double reference
+        # comparison meaningful across compilers
     )
 
     # --- Reproducible paths -------------------------------------------------
@@ -54,13 +53,15 @@ function(moba_apply_compile_settings target)
     # and expect to run the debugger from the source root.
     set(_paths -fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=)
 
-    target_compile_options(${target} INTERFACE ${_warnings} ${_codegen} ${_paths})
+    target_compile_options(
+        ${target}
+        INTERFACE ${_warnings} ${_codegen} ${_paths}
+    )
 
     # --- Sanitizers --------------------------------------------------------
     #
     # What is on, and why each one earns its place.
     if(MOBA_SANITIZE)
-
         # address  -- heap/stack/global overflow, use-after-free,
         #             use-after-return, use-after-scope.
         # undefined -- the UBSan group. The members that matter here:
@@ -73,12 +74,12 @@ function(moba_apply_compile_settings target)
         #     implicit truncation on function returns, vptr
         set(_san
             -fsanitize=address,undefined
-            -fno-sanitize-recover=all   # UB aborts. Without this UBSan prints
-                                        # and continues, and ctest goes green
-                                        # on a test that invoked UB.
+            -fno-sanitize-recover=all # UB aborts. Without this UBSan prints
+            # and continues, and ctest goes green
+            # on a test that invoked UB.
             -fno-omit-frame-pointer
-            -g                          # symbolised stack traces even in
-                                        # optimised sanitizer builds
+            -g # symbolised stack traces even in
+            # optimised sanitizer builds
         )
 
         # local-bounds catches out-of-range indexing of fixed-size local
@@ -99,11 +100,12 @@ function(moba_apply_compile_settings target)
         #
         # Each macro is ignored by the standard library that does not own it,
         # so both can be defined unconditionally.
-        target_compile_definitions(${target} INTERFACE
-            _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG  # libc++ >= 18
-            _GLIBCXX_ASSERTIONS                                  # libstdc++
+        target_compile_definitions(
+            ${target}
+            INTERFACE
+                _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG # libc++ >= 18
+                _GLIBCXX_ASSERTIONS # libstdc++
         )
-
     endif()
 
     # --- Deliberately NOT enabled -------------------------------------------
@@ -120,5 +122,4 @@ function(moba_apply_compile_settings target)
     # ThreadSanitizer            No threads by design, and cannot combine with
     #                            ASan. Its own preset if platform ever threads.
     # float-divide-by-zero       No floating point in the sim.
-
 endfunction()

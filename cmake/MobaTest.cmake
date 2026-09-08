@@ -11,19 +11,21 @@
 include(FetchContent)
 
 function(moba_setup_test_framework)
-
-    FetchContent_Declare(doctest
+    FetchContent_Declare(
+        doctest
         GIT_REPOSITORY https://github.com/doctest/doctest.git
-        GIT_TAG        v2.5.3
-        GIT_SHALLOW    TRUE
+        GIT_TAG v2.5.3
+        GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(doctest)
 
     # doctest's own headers are not built under our warning set. Mark them as
     # system includes so -Werror applies to moba code only.
     get_target_property(_doctest_inc doctest INTERFACE_INCLUDE_DIRECTORIES)
-    set_target_properties(doctest PROPERTIES
-        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_doctest_inc}")
+    set_target_properties(
+        doctest
+        PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_doctest_inc}"
+    )
 
     # doctest ships a CMake helper that enumerates TEST_CASEs after the binary
     # is built and registers each one with ctest.
@@ -36,12 +38,14 @@ function(moba_setup_test_framework)
 
     # Shared main(). An OBJECT library, not STATIC: a static library's main()
     # is not referenced by anything and the linker is entitled to drop it.
-    add_library(moba_test_main OBJECT "${CMAKE_SOURCE_DIR}/tests/doctest_main.cpp")
+    add_library(
+        moba_test_main
+        OBJECT
+        "${CMAKE_SOURCE_DIR}/tests/doctest_main.cpp"
+    )
     target_link_libraries(moba_test_main PUBLIC doctest::doctest moba::options)
     add_library(moba::test_main ALIAS moba_test_main)
-
 endfunction()
-
 
 function(moba_add_test target)
     cmake_parse_arguments(ARG "" "" "SOURCES;LIBS" ${ARGN})
@@ -51,11 +55,9 @@ function(moba_add_test target)
     endif()
 
     add_executable(${target} ${ARG_SOURCES})
-    target_link_libraries(${target} PRIVATE
-        moba::test_main
-        doctest::doctest
-        moba::options
-        ${ARG_LIBS}
+    target_link_libraries(
+        ${target}
+        PRIVATE moba::test_main doctest::doctest moba::options ${ARG_LIBS}
     )
 
     if(MOBA_HAVE_DOCTEST_DISCOVERY)
@@ -66,4 +68,16 @@ function(moba_add_test target)
     else()
         add_test(NAME ${target} COMMAND ${target})
     endif()
+endfunction()
+
+function(moba_add_compile_fail_test target source)
+    add_executable(i${target} EXCLUDE_FROM_ALL ${source})
+    target_link_libraries(i${target} PRIVATE moba::options ${ARGN})
+    add_test(
+        NAME ${target}
+        COMMAND
+            ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target i${target}
+            --config $<CONFIG>
+    )
+    set_tests_properties(${target} PROPERTIES PASS_REGULAR_EXPRESSION "FAIL")
 endfunction()

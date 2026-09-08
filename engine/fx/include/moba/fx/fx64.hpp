@@ -10,28 +10,27 @@
 #include <type_traits>
 
 namespace moba {
-
 namespace detail {
 
-  /// does a 128-bit intermediate still fit fx64's 64-bit storage?
-  [[nodiscard]] constexpr bool fits_i64(i128 v) noexcept {
-    return v >= I64_MIN && v <= I64_MAX;
-  }
+/// does a 128-bit intermediate still fit fx64's 64-bit storage?
+[[nodiscard]] constexpr bool fits_i64(i128 v) noexcept {
+  return v >= I64_MIN && v <= I64_MAX;
+}
 
-  /// clamp a 128-bit intermediate into fx64's storage. Only for the _sat family.
-  [[nodiscard]] constexpr i64 clamp_i64(i128 v) noexcept {
-    if (v > I64_MAX) return I64_MAX;
-    if (v < I64_MIN) return I64_MIN;
-    return static_cast<i64>(v);
-  }
+/// clamp a 128-bit intermediate into fx64's storage. Only for the _sat family.
+[[nodiscard]] constexpr i64 clamp_i64(i128 v) noexcept {
+  if (v > I64_MAX) return I64_MAX;
+  if (v < I64_MIN) return I64_MIN;
+  return static_cast<i64>(v);
+}
 
-  // __int128 is a vendor extension, so C++20's arithmetic-shift guarantee for
-  // standard integer types does not formally cover it. Both compilers do
-  // arithmetic; pin it rather than assume it, because operator* below depends on
-  // the shift flooring the same way fx::operator* does.
-  static_assert((static_cast<i128>(-1) >> 1) == -1, "i128 >> must be arithmetic");
+// __int128 is a vendor extension, so C++20's arithmetic-shift guarantee for
+// standard integer types does not formally cover it. Both compilers do
+// arithmetic; pin it rather than assume it, because operator* below depends on
+// the shift flooring the same way fx::operator* does.
+static_assert((static_cast<i128>(-1) >> 1) == -1, "i128 >> must be arithmetic");
 
-} // namespace detail
+}  // namespace detail
 
 /* fx64 -- signed Q32.32 fixed point. Scratch space, not storage.
  *
@@ -41,14 +40,15 @@ namespace detail {
  *   resolution   fx64::EPSILON = 1/2^32, about 2.3e-10
  *   overflow     see the policy block in fx.hpp
  *
- * Rounding follows fx exactly, including the inconsistency documented there:
- * multiply and floor_to_int round toward negative infinity, division rounds
- * toward zero. When that is settled in fx, settle it here in the same commit. */
+ * Rounding follows fx exactly: floor everywhere, with detail::fdiv correcting
+ * the division paths. See the ROUNDING block in fx.hpp for why, including why
+ * that was a consistency fix rather than the determinism fix it was filed as.
+ */
 struct [[nodiscard]] fx64 {
   /* REPRESENTATION */
 
   static constexpr int SHIFT = 32;
-  static constexpr i64 SCALE = i64{ 1 } << SHIFT; // 4294967296
+  static constexpr i64 SCALE = i64{ 1 } << SHIFT;  // 4294967296
 
   i64 raw = 0;
 
@@ -65,7 +65,9 @@ struct [[nodiscard]] fx64 {
 
   // Total over i32 -- I32_MAX * 2^32 fits i64 and I32_MIN * 2^32 is exactly
   // I64_MIN -- so unlike fx::from_int this needs no range assert.
-  static constexpr fx64 from_int(i32 n) noexcept { return from_raw(i64{ n } * SCALE); }
+  static constexpr fx64 from_int(i32 n) noexcept {
+    return from_raw(i64{ n } * SCALE);
+  }
 
   // Total as well: |raw| << 16 maxes at 2^47.
   static constexpr fx64 widen(fx v) noexcept {
@@ -75,10 +77,14 @@ struct [[nodiscard]] fx64 {
   /* CONVERSION TO INTEGER -- same three names as fx, same three answers. */
 
   /// largest whole number <= value.  floor_to_int(-0.5) == -1
-  [[nodiscard]] constexpr i64 floor_to_int() const noexcept { return raw >> SHIFT; }
+  [[nodiscard]] constexpr i64 floor_to_int() const noexcept {
+    return raw >> SHIFT;
+  }
 
   /// drop the fraction, toward zero.  trunc_to_int(-0.5) == 0
-  [[nodiscard]] constexpr i64 trunc_to_int() const noexcept { return raw / SCALE; }
+  [[nodiscard]] constexpr i64 trunc_to_int() const noexcept {
+    return raw / SCALE;
+  }
 
   /// nearest whole number, halves upward.  round_to_int(-0.5) == 0
   [[nodiscard]] constexpr i64 round_to_int() const noexcept {
@@ -117,7 +123,8 @@ struct [[nodiscard]] fx64 {
   constexpr fx64 operator/(fx64 o) const noexcept {
     MOBA_ASSERT(o.raw != 0);
     if (o.raw == 0) return from_raw(raw >= 0 ? I64_MAX : I64_MIN);
-    const i128 wide = (static_cast<i128>(raw) << SHIFT) / o.raw;
+    const i128 wide
+        = detail::fdiv<i128>(static_cast<i128>(raw) << SHIFT, o.raw);
     MOBA_ASSERT(detail::fits_i64(wide));
     return from_raw(static_cast<i64>(wide));
   }
@@ -127,7 +134,8 @@ struct [[nodiscard]] fx64 {
    * + and - widen the fx operand and stay in Q32.32. operator*(fx) is the one
    * that earns its keep: scaling a Q32.32 accumulator by a Q16.16 factor is
    * the damage-over-time shape -- a running total times a per-tick multiplier
-   * -- and doing it via widen() would shift twice and round twice for nothing. */
+   * -- and doing it via widen() would shift twice and round twice for nothing.
+   */
 
   // clang-format off
   constexpr fx64 operator+(fx v) const noexcept { return *this + widen(v); }
@@ -156,8 +164,8 @@ struct [[nodiscard]] fx64 {
     // UB rather than a wrap, so it has to be intercepted before the divide.
     const bool overflows = raw == I64_MIN && n == -1;
     MOBA_ASSERT(!overflows);
-    if (overflows) return from_raw(I64_MIN); // the value a wrap would produce
-    return from_raw(raw / n);
+    if (overflows) return from_raw(I64_MIN);  // the value a wrap would produce
+    return from_raw(detail::fdiv<i64>(raw, n));
   }
 
   /* COMPOUND ASSIGNMENT
@@ -186,7 +194,7 @@ struct [[nodiscard]] fx64 {
 
   /* COMPARISON */
 
-  constexpr std::strong_ordering operator<=>(const fx64&) const = default;
+  constexpr std::strong_ordering operator<=>(const fx64 &) const = default;
 
   /* CONSTANTS -- see the note in fx.hpp on why these are declared then defined
    * outside the class. */
@@ -271,10 +279,14 @@ static_assert(!std::is_aggregate_v<fx64>);
 // clamped and fx::operator* wrapped, the two paths returned raw 2147483647 and
 // raw 1111490560 for the same inputs.
 //
-// TODO: [DETERMINISM] `>> 16` floors, matching fx::operator*. But nothing yet
-//       proves fx::operator*, mul_wide+narrow, and fx64::operator* round the
-//       same way on negatives. Three paths, three chances to disagree, and a
-//       1-ULP disagreement is a desync. Highest-value test in the fx suite.
+// `>> 16` floors, matching fx::operator*. fx::operator*, narrow(mul_wide),
+// narrow(fx64 * fx64) and narrow(fx64 * fx) were measured to round identically
+// on negatives across 6.8M products, so they do agree today -- but nothing in
+// the suite holds them there.
+//
+// TODO: [missing] Pin all four paths against each other in test_fx64.cpp. Four
+//       paths, six chances to disagree, and a 1-ULP disagreement is a desync.
+//       Highest-value test in the fx suite.
 [[nodiscard]] constexpr fx narrow(fx64 v) noexcept {
   const i64 shifted = v.raw >> (fx64::SHIFT - fx::SHIFT);
   MOBA_ASSERT(detail::fits_i32(shifted));
@@ -299,7 +311,7 @@ static_assert(!std::is_aggregate_v<fx64>);
 
 [[nodiscard]] constexpr fx64 div_sat(fx64 a, fx64 b) noexcept {
   if (b.raw == 0) return fx64::from_raw(a.raw >= 0 ? I64_MAX : I64_MIN);
-  return fx64::from_raw(detail::clamp_i64((static_cast<i128>(a.raw) << fx64::SHIFT) / b.raw));
+  return fx64::from_raw(detail::clamp_i64(detail::fdiv<i128>(static_cast<i128>(a.raw) << fx64::SHIFT, b.raw)));
 }
 
 /// narrow() that clamps instead of wrapping, for callers that want the edge.
@@ -308,4 +320,4 @@ static_assert(!std::is_aggregate_v<fx64>);
 }
 // clang-format on
 
-} // namespace moba
+}  // namespace moba

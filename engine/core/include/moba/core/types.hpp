@@ -34,4 +34,33 @@ using u128  = unsigned __int128;
 #else
 #error "fx64 multiply requires 128-bit integer support (GCC/Clang)"
 #endif
+
+// NUMERIC ALIASES ONLY. Nothing else belongs in this header.
+//
+// assert.hpp includes this, and essentially every translation unit includes
+// assert.hpp, so whatever lands here is paid for by the whole project. The
+// three includes above cost ~4300 preprocessed lines between them. A single
+// convenience alias undoes that:
+//
+//     <span>          71751        <utility>       10113
+//     <array>         48524        <memory>        33379
+//     <string_view>   48411        <vector>        65969
+//     <string>        51884
+//
+// Carrying string_view/span/array/pair here put a sim TU at 72189 lines and
+// 235 ms of front-end time. Numerics alone: 10893 lines, 68 ms. At five TUs
+// that is noise; at two hundred it is a 47-second cold build against 14.
+//
+// Two separate reasons the owning types (string, vector, unique_ptr,
+// shared_ptr, weak_ptr) never come back here even if the cost were free:
+// World is copied and fingerprinted as a plain block of bytes -- see the
+// static_assert block in <moba/fx/fx.hpp> -- and every one of them either
+// heap-allocates, so the bytes in the struct are an address rather than the
+// data, or stores a pointer that moves run to run under ASLR. Checksumming
+// either reports a desync that did not happen, or hides one that did.
+// uintptr_t/intptr_t are the same hazard with the pointer made explicit.
+//
+// Outside the sim -- tooling, asset loading, the eventual renderer -- spell
+// std::string and std::vector in full and include the real header there. The
+// friction is the point: it marks where the snapshotted world ends.
 } // namespace moba

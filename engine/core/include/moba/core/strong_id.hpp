@@ -4,21 +4,23 @@
 #include <moba/core/types.hpp>
 
 namespace moba {
-template <typename Tag, typename Rep = u32> struct [[nodiscard]] strong_id {
+template <typename Tag, typename Rep = u32>
+struct [[nodiscard]] strong_id {
 public:
-  using rep = Rep;
+  using rep                      = Rep;
   constexpr strong_id() noexcept = default;
   constexpr explicit strong_id(Rep v) noexcept : v_{ v } {}
-  constexpr explicit operator Rep() const noexcept { return v_; }
-  constexpr Rep get() const noexcept { return v_; }
-  [[nodiscard]] constexpr bool valid() const noexcept { return v_ != null_v; }
-  constexpr auto operator<=>(const strong_id&) const = default;
+
+  constexpr explicit             operator Rep() const noexcept { return v_; }
+  constexpr Rep                  get() const noexcept { return v_; }
+  [[nodiscard]] constexpr bool   valid() const noexcept { return v_ != null_v; }
+  constexpr std::strong_ordering operator<=>(const strong_id &) const = default;
 
 private:
   static constexpr Rep null_v = std::numeric_limits<Rep>::max();
-  Rep v_{ null_v };
+  Rep                  v_{ null_v };
 };
-} // namespace moba
+}  // namespace moba
 
 // using entity_id = moba::strong_id<struct entity_tag>;
 // using player_id = moba::strong_id<struct player_tag>;
@@ -43,7 +45,8 @@ private:
 //       (std::to_underlying is C++23, write a one-liner); printing needs a
 //       helper.
 //
-//   (2) Tag template.  template <typename Tag, typename Rep = u32> struct strong_id;
+//   (2) Tag template.  template <typename Tag, typename Rep = u32> struct
+//   strong_id;
 //                      using entity_id = strong_id<struct entity_tag>;
 //       The tag is declared inline in the alias, never defined, costs nothing.
 //       Buys member functions. Costs machinery, and you must verify it stays

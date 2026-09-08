@@ -1,7 +1,7 @@
 #pragma once
 
 // moba/fx/format.hpp -- text output for the fx types. Tooling only.
-//
+
 // Why std::format and not ostream, all three verified:
 //   1. Precision. format's default for double is the shortest representation
 //      that round-trips, so it prints the exact value; ostream's default is 6
@@ -30,7 +30,7 @@
 //   - <format> is a heavy header. It stays here and never enters fx.hpp.
 //
 // Verified byte-identical on Clang 17 / libc++ and GCC 16 / libstdc++.
-//
+
 // fx64 note: fx64's decimal is an approximation and its raw is authoritative.
 // raw is i64, a double carries a 53-bit mantissa, so any |raw| above 2^53
 // prints rounded -- that is fx64 values above ~2^21 (about 2.1 million),
@@ -38,12 +38,12 @@
 // what the rounding-agreement test inspects. fx is not affected: raw is i32,
 // every i32 converts to double exactly, and dividing by 2^16 only changes the
 // exponent.
-//
+
 // test_fx.cpp includes this header, which is what compiles it: moba_fx is an
 // INTERFACE library and FILE_SET HEADERS is IDE metadata, not a compile. Keep
 // that include -- drop it and a break here ships silently, and doctest goes
 // back to printing `CHECK( {?} == {?} )`.
-//
+
 // TODO: [missing] vec2 and angle formatters, once those exist.
 
 #include <format>
@@ -65,7 +65,7 @@ namespace moba {
 
 // specialisations must be at global scope, and format() must be const.
 template <> struct std::formatter<moba::fx> : std::formatter<double> {
-  auto format(moba::fx v, std::format_context& ctx) const {
+  auto format(moba::fx v, std::format_context &ctx) const {
     // the base writes the number and hands back the cursor; append after it
     auto out = std::formatter<double>::format(moba::to_double(v), ctx);
     return std::format_to(out, " fx({})", v.raw);
@@ -73,18 +73,18 @@ template <> struct std::formatter<moba::fx> : std::formatter<double> {
 };
 
 template <> struct std::formatter<moba::fx64> : std::formatter<double> {
-  auto format(moba::fx64 v, std::format_context& ctx) const {
+  auto format(moba::fx64 v, std::format_context &ctx) const {
     auto out = std::formatter<double>::format(moba::to_double_lossy(v), ctx);
     return std::format_to(out, " fx64({})", v.raw);
   }
 };
 
 namespace moba {
-inline std::ostream& operator<<(std::ostream& os, fx v) {
+inline std::ostream &operator<<(std::ostream &os, fx v) {
   return os << std::format("{}", v);
 }
 
-inline std::ostream& operator<<(std::ostream& os, fx64 v) {
+inline std::ostream &operator<<(std::ostream &os, fx64 v) {
   return os << std::format("{}", v);
 }
 

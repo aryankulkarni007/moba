@@ -10,7 +10,10 @@
 # Presets set MOBA_EXPECT_COMPILER_ID; a mismatch fails configure loudly.
 # CMake reports these as: Clang (LLVM), AppleClang, GNU.
 
-if(MOBA_EXPECT_COMPILER_ID AND NOT CMAKE_CXX_COMPILER_ID STREQUAL MOBA_EXPECT_COMPILER_ID)
+if(
+    MOBA_EXPECT_COMPILER_ID
+    AND NOT CMAKE_CXX_COMPILER_ID STREQUAL MOBA_EXPECT_COMPILER_ID
+)
     if(MOBA_EXPECT_COMPILER_ID STREQUAL "GNU")
         set(_hint
             "On macOS /usr/bin/g++ and /usr/bin/gcc are Apple Clang. Install real GCC
@@ -44,4 +47,7 @@ if(MOBA_EXPECT_COMPILER_ID AND NOT CMAKE_CXX_COMPILER_ID STREQUAL MOBA_EXPECT_CO
     )
 endif()
 
-message(STATUS "moba compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(
+    STATUS
+    "moba compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+)

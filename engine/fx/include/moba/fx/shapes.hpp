@@ -12,9 +12,8 @@
 //   capsule { segment seg; fx r; }   most bodies and hitboxes are one of these
 //
 // Predicates:
-//   overlaps(circle, circle) / (aabb, aabb) / (circle, aabb) / (capsule, capsule)
-//   contains(aabb, vec2)
-//   dist_sq_point_segment(vec2, segment) -> fx64
+//   overlaps(circle, circle) / (aabb, aabb) / (circle, aabb) / (capsule,
+//   capsule) contains(aabb, vec2) dist_sq_point_segment(vec2, segment) -> fx64
 //   dist_sq_segment_segment(segment, segment) -> fx64
 //   raycast(segment ray, circle) -> optional hit
 //
