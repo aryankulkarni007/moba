@@ -2,6 +2,8 @@ moba_add_test(test_fx
     SOURCES
         test_fx.cpp
         test_fx64.cpp
+        test_isqrt.cpp
+        test_isqrt.cpp
     LIBS
         moba::fx
 )

@@ -15,10 +15,20 @@
 #   ctest --preset debug -L 'fx/fx64'      whole suite
 #   ctest --preset debug -R 'four-path'    one case
 #
-# The consequence that bites: two TEST_CASEs with the same name anywhere in the
-# project collide into one ctest entry name and configure fails. That is why
-# test_fx64.cpp prefixes its mirrored cases with `fx64: ` -- the two files
-# deliberately test the same properties under the same names otherwise.
+# Two consequences bite, both about TEST_CASE names:
+#
+#   1. Two TEST_CASEs with the same name anywhere in the project collide into
+#      one ctest entry name and configure fails. That is why test_fx64.cpp
+#      prefixes its mirrored cases with `fx64: ` -- the two files deliberately
+#      test the same properties under the same names otherwise.
+#
+#   2. NO COMMAS IN TEST_CASE NAMES. doctest's discovery script escapes the
+#      comma for --test-case= but its follow-up --list-test-suites query comes
+#      back empty, so the generated registration ends `... TIMEOUT 120 LABELS)`
+#      with no value. The test still runs under a bare `ctest`, but it has no
+#      label, so `ctest -L <suite>` silently skips it -- you get a green run
+#      that covered one case fewer than you think. Caught twice already; if a
+#      suite's -L count looks low, grep the test names for a comma.
 
 include(FetchContent)
 
@@ -127,7 +137,10 @@ function(moba_add_compile_fail_test target)
     cmake_parse_arguments(ARG "" "SOURCE;EXPECT" "LIBS" ${ARGN})
 
     if(NOT ARG_SOURCE)
-        message(FATAL_ERROR "moba_add_compile_fail_test(${target}): SOURCE is required")
+        message(
+            FATAL_ERROR
+            "moba_add_compile_fail_test(${target}): SOURCE is required"
+        )
     endif()
     if(NOT ARG_EXPECT)
         message(
@@ -154,4 +167,77 @@ function(moba_add_compile_fail_test target)
             RESOURCE_LOCK moba_build_tree
             LABELS compile_fail
     )
+endfunction()
+
+# A test that a process DIES, and dies for the stated reason.
+#
+#   moba_add_death_test(death_assert_condition_is_reported
+#       EXE    death_assert
+#       ARG    assert_false
+#       EXPECT "1 == 2"
+#   )
+#   moba_add_death_test(death_assert_true_does_not_abort
+#       EXE          death_assert
+#       ARG          assert_true
+#       NEVER_ABORTS
+#   )
+#
+# The work happens in cmake/MobaDeathTest.cmake, which this only parameterises;
+# read that file for why the child cannot be the ctest COMMAND directly. The
+# short version: SIGABRT may fail a test regardless of PASS_REGULAR_EXPRESSION,
+# so the run is wrapped in `cmake -P` and the signal never reaches CTest.
+#
+# WHICH ARM EXPECTS AN ABORT. Ninja is single-config, so this resolves at
+# configure time from CMAKE_BUILD_TYPE. The surprise worth stating out loud:
+# RelWithDebInfo gets -DNDEBUG from CMake's own default flags, so `release-san`
+# is a RELEASE arm for assertion purposes despite the debug info. Debug is the
+# only preset in this project that expects an abort; the other three assert the
+# NDEBUG arm stays silent, which is the stronger half of the test -- a macro
+# that aborts in release is a shipped crash.
+#
+# NEVER_ABORTS marks a control case: a TRUE condition, which must exit cleanly
+# in BOTH arms. Without at least one of these, an implementation that aborted
+# unconditionally would pass every other death test in the suite.
+#
+# No RESOURCE_LOCK, unlike moba_add_compile_fail_test: these spawn a process
+# rather than driving a build, so they parallelise under `ctest -j` fine.
+# LABELS death, so `ctest -LE death` skips them -- useful under a debugger,
+# where a deliberate abort is noise.
+function(moba_add_death_test name)
+    cmake_parse_arguments(ARG "NEVER_ABORTS" "EXE;ARG;EXPECT" "" ${ARGN})
+
+    if(NOT ARG_EXE)
+        message(FATAL_ERROR "moba_add_death_test(${name}): EXE is required")
+    endif()
+    if(NOT ARG_ARG)
+        message(FATAL_ERROR "moba_add_death_test(${name}): ARG is required")
+    endif()
+    if(NOT ARG_NEVER_ABORTS AND NOT ARG_EXPECT)
+        message(
+            FATAL_ERROR
+            "moba_add_death_test(${name}): EXPECT is required unless "
+            "NEVER_ABORTS is set. A death test with no expected text passes on "
+            "any crash at all -- a segfault or a sanitizer report reads as "
+            "green. Name the text the assertion is supposed to print."
+        )
+    endif()
+
+    if(ARG_NEVER_ABORTS OR NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(_expect_abort OFF)
+    else()
+        set(_expect_abort ON)
+    endif()
+
+    add_test(
+        NAME ${name}
+        COMMAND
+            ${CMAKE_COMMAND} "-DTEST_EXE=$<TARGET_FILE:${ARG_EXE}>"
+            "-DTEST_ARG=${ARG_ARG}" "-DEXPECT_ABORT=${_expect_abort}"
+            "-DEXPECT_TEXT=${ARG_EXPECT}"
+            # Pins -fmacro-prefix-map. Every death test checks it for free,
+            # since every one of them that prints anything prints a path.
+            "-DFORBID_TEXT=${CMAKE_SOURCE_DIR}" -P
+            "${CMAKE_SOURCE_DIR}/cmake/MobaDeathTest.cmake"
+    )
+    set_tests_properties(${name} PROPERTIES LABELS death)
 endfunction()

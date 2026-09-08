@@ -7,7 +7,7 @@
 // do not define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN here.
 
 // covers <moba/fx/fx64.hpp>.
-//
+
 // The first half mirrors test_fx.cpp case for case, so a reader who knows one
 // file knows the other and a property that holds for fx is visibly asserted
 // for fx64 too. Three deliberate divergences, each noted where it occurs:

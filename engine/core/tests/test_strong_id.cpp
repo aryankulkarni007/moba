@@ -70,7 +70,7 @@ TEST_SUITE("core/strong_id") {
     CHECK(true);
   }
 
-  TEST_CASE("default construction is the sentinel, not zero") {
+  TEST_CASE("default construction is the sentinel rather than zero") {
     // 0 is a plausible real index, so a zero-initialised World must not be
     // full of valid-looking references to entity 0.
     constexpr entity_id def{};

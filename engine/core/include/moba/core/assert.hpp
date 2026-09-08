@@ -95,11 +95,15 @@ namespace moba::detail {
 // under NDEBUG. Both arms are exercised because the debug and release presets
 // build the same file.
 
-// TODO: [missing] Death test -- "does a failing assert actually abort". Needs a
-//       tiny separate executable driven from CMake, because it aborts and so
-//       cannot live in the doctest binary. moba_add_compile_fail_test() in
-//       MobaTest.cmake is the shape to copy, but NOT the mechanism: this is a
-//       run-time abort, not a compile error, so it wants a process that runs
-//       and dies. Match on the message assertion_failed prints, the same way
-//       the compile-fail tests match on the throw text -- a bare "non-zero
-//       exit" passes on a crash that is not the assert.
+// Death tests live in engine/core/tests/death_assert.cpp, a separate
+// executable because every case in it ends the process. They cover what
+// test_assert.cpp structurally cannot: that a FAILING assert actually aborts,
+// that it reports #cond and msg, and that source_location resolves to the
+// macro's use site rather than to assertion_failed. The NDEBUG arm asserts the
+// mirror image -- the same cases must exit cleanly, because a macro that
+// aborts in release is a shipped crash.
+//
+// They also pin -fmacro-prefix-map: every death test fails if the absolute
+// source root appears in the output. Verified that the flag reaches
+// source_location::file_name() and not just __FILE__ -- the printed path is
+// repo-relative under both Clang and GCC.

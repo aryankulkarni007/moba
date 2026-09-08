@@ -76,7 +76,7 @@ title used to claim all four were.
 Four small files. Strict dependency order - each needs the one above it. At the
 end of this list you are writing phase-2 hitbox code, which is logic, not types.
 
-- [ ] `fx/isqrt.hpp` - whole file. **No dependencies, start here.** Blocks
+- [x] `fx/isqrt.hpp` - whole file. **No dependencies, start here.** Blocks
       `vec2::length` and `vec2::normalise`. The loop must run a fixed number of
       iterations, or terminate on a condition depending only on the input - a
       convergence test that could differ between compilers is a desync.
@@ -118,17 +118,21 @@ place. What is left is listed below; do not re-open the closed items.
       at all. An INTERFACE library plus `FILE_SET HEADERS` never compiles a
       header, so an unincluded header is an unchecked one. Any new header needs
       a test that includes it for that reason alone.
+- [x] `core/assert.hpp` - the death test. DONE.
+      `engine/core/tests/death_assert.cpp` plus `cmake/MobaDeathTest.cmake`
+      and `moba_add_death_test()`. The trap worth remembering: CTest may fail
+      a test on SIGABRT regardless of `PASS_REGULAR_EXPRESSION`, so the child
+      cannot be the ctest COMMAND -- the run is wrapped in `cmake -P` and the
+      signal is absorbed inside `execute_process`. Matches on the printed
+      message, not on a bare non-zero exit, for the same reason the
+      compile-fail tests do. Two controls with a TRUE condition assert the
+      NDEBUG arm stays silent. Also pins `-fmacro-prefix-map`, which nothing
+      tested before.
 
 - [ ] `core/types.hpp` - static_assert the alias widths and signedness. Free,
       turns a future target mismatch into a compile error. `test_types.cpp`
       checks `is_same_v` against the `<cstdint>` names, which is not the same
       claim as "`i32` is 4 bytes and signed on this target".
-- [ ] `core/assert.hpp` `[missing]` - the death test. "Does a failing assert actually
-      abort" is the one property `test_assert.cpp` cannot check, because the
-      process dies. Needs a separate executable driven from CMake, matching on
-      the message `assertion_failed` prints - not on a bare non-zero exit,
-      which passes on any crash. See `moba_add_compile_fail_test` for the
-      shape, though the mechanism differs (run-time abort, not compile error).
 
 ## P4 - deferred on purpose. Do not touch yet.
 
@@ -171,7 +175,7 @@ them large, and `shapes.hpp` is already gameplay.
 
 Two things to carry INTO P2, learned from the work above:
 
-  - a new header needs a test that includes it, or it is never compiled at all
-  - a test that asserts something "must fail" needs to assert WHY it failed.
-    `WILL_FAIL` and a bare non-zero exit both pass on the wrong failure; the
-    compile-fail tests match on the specific diagnostic for this reason
+- a new header needs a test that includes it, or it is never compiled at all
+- a test that asserts something "must fail" needs to assert WHY it failed.
+  `WILL_FAIL` and a bare non-zero exit both pass on the wrong failure; the
+  compile-fail tests match on the specific diagnostic for this reason

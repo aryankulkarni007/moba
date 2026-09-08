@@ -29,7 +29,6 @@ namespace detail {
 // arithmetic; pin it rather than assume it, because operator* below depends on
 // the shift flooring the same way fx::operator* does.
 static_assert((static_cast<i128>(-1) >> 1) == -1, "i128 >> must be arithmetic");
-
 }  // namespace detail
 
 /* fx64 -- signed Q32.32 fixed point. Scratch space, not storage.
