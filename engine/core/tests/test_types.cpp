@@ -10,7 +10,7 @@
 // covers <moba/core/types.hpp>.
 
 TEST_SUITE("core/types") {
-  TEST_CASE("unsigned integer aliases") {
+  TEST_CASE("types: unsigned integer aliases") {
     static_assert(std::is_same_v<moba::u8, std::uint8_t>);
     static_assert(std::is_same_v<moba::u16, std::uint16_t>);
     static_assert(std::is_same_v<moba::u32, std::uint32_t>);
@@ -19,7 +19,7 @@ TEST_SUITE("core/types") {
     static_assert(std::is_same_v<moba::usize, std::size_t>);
   }
 
-  TEST_CASE("signed integer aliases") {
+  TEST_CASE("types: signed integer aliases") {
     static_assert(std::is_same_v<moba::i8, std::int8_t>);
     static_assert(std::is_same_v<moba::i16, std::int16_t>);
     static_assert(std::is_same_v<moba::i32, std::int32_t>);
@@ -28,7 +28,7 @@ TEST_SUITE("core/types") {
     static_assert(std::is_same_v<moba::isize, std::ptrdiff_t>);
   }
 
-  TEST_CASE("architectural sizing guarantees") {
+  TEST_CASE("types: architectural sizing guarantees") {
     // is_same_v above checks what the alias is DEFINED as. This case is about
     // what the target then makes of it -- a different claim, and the one that
     // breaks on a new platform rather than in a refactor.
@@ -43,19 +43,19 @@ TEST_SUITE("core/types") {
     CHECK(sizeof(moba::usize) == sizeof(void*));
   }
 
-  TEST_CASE("floating point aliases") {
+  TEST_CASE("types: floating point aliases") {
     static_assert(std::is_same_v<moba::f32, float>);
     static_assert(std::is_same_v<moba::f64, double>);
   }
 
-  TEST_CASE("numeric limits constants") {
+  TEST_CASE("types: numeric limits constants") {
     static_assert(moba::I32_MAX == std::numeric_limits<moba::i32>::max());
     static_assert(moba::I32_MIN == std::numeric_limits<moba::i32>::min());
     static_assert(moba::I64_MAX == std::numeric_limits<moba::i64>::max());
     static_assert(moba::I64_MIN == std::numeric_limits<moba::i64>::min());
   }
 
-  TEST_CASE("header stays numeric-only") {
+  TEST_CASE("types: header stays numeric-only") {
     // types.hpp is on the include path of every TU via assert.hpp, so its
     // weight is paid project-wide. These three are all it may include; adding
     // a convenience alias for a container or string type costs 10k-70k

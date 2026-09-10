@@ -39,7 +39,7 @@ concept less_comparable = requires(A a, B b) { a < b; };
 }  // namespace
 
 TEST_SUITE("core/strong_id") {
-  TEST_CASE("distinct tags are distinct types") {
+  TEST_CASE("strong_id: distinct tags are distinct types") {
     // The whole point. damage(attacker, victim) with the arguments swapped
     // must not compile, and that rests on this.
     static_assert(!std::is_same_v<entity_id, player_id>);
@@ -48,7 +48,7 @@ TEST_SUITE("core/strong_id") {
     CHECK(true);
   }
 
-  TEST_CASE("conversions are explicit in both directions") {
+  TEST_CASE("strong_id: conversions are explicit in both directions") {
     // An implicit conversion either way reintroduces the bug the type
     // prevents, so both are checked rather than assumed.
     static_assert(!std::is_convertible_v<moba::u32, entity_id>);
@@ -60,7 +60,7 @@ TEST_SUITE("core/strong_id") {
     static_assert(static_cast<moba::u32>(id) == 7);
   }
 
-  TEST_CASE("no arithmetic") {
+  TEST_CASE("strong_id: no arithmetic") {
     // The absence IS the feature: id + 1 is meaningless and two ids do not
     // add. Nothing here should ever start compiling.
     static_assert(!addable<entity_id, entity_id>);
@@ -70,7 +70,7 @@ TEST_SUITE("core/strong_id") {
     CHECK(true);
   }
 
-  TEST_CASE("default construction is the sentinel rather than zero") {
+  TEST_CASE("strong_id: default construction is the sentinel rather than zero") {
     // 0 is a plausible real index, so a zero-initialised World must not be
     // full of valid-looking references to entity 0.
     constexpr entity_id def{};
@@ -86,7 +86,7 @@ TEST_SUITE("core/strong_id") {
     static_assert(wide_def.get() == ~moba::u64{ 0 });
   }
 
-  TEST_CASE("comparison and ordering") {
+  TEST_CASE("strong_id: comparison and ordering") {
     // Ordering exists so ids sort into a deterministic iteration order.
     static_assert(entity_id{ 1 } == entity_id{ 1 });
     static_assert(entity_id{ 1 } != entity_id{ 2 });
@@ -100,7 +100,7 @@ TEST_SUITE("core/strong_id") {
     CHECK(true);
   }
 
-  TEST_CASE("comparison across tags does not compile") {
+  TEST_CASE("strong_id: comparison across tags does not compile") {
     static_assert(!equality_comparable<entity_id, player_id>);
     static_assert(!less_comparable<entity_id, player_id>);
     // ...while the same-tag comparisons that DO exist still work, so this is
@@ -127,7 +127,7 @@ TEST_SUITE("core/strong_id") {
     CHECK(sizeof(entity_id) == sizeof(moba::u32));
   }
 
-  TEST_CASE("no std::hash specialisation") {
+  TEST_CASE("strong_id: no std::hash specialisation") {
     // Not an oversight. There are no hash maps in the sim by design --
     // iteration order would vary between machines -- and withholding the hook
     // is what enforces it. If this ever starts failing, someone added a

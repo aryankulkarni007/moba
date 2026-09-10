@@ -10,13 +10,13 @@
 using namespace moba;
 
 TEST_SUITE("fx/fx") {
-  TEST_CASE("one times one is one") {
+  TEST_CASE("fx: one times one is one") {
     CHECK(
         moba::fx::from_int(1) * moba::fx::from_int(1) == moba::fx::from_int(1)
     );
   }
 
-  TEST_CASE("round trip") {
+  TEST_CASE("fx: round trip") {
     SUBCASE("from_int -> floor/trunc/round") {
       for (i32 n = fx::MIN_INT; n <= fx::MAX_INT; ++n) {
         fx val = fx::from_int(n);
@@ -35,7 +35,7 @@ TEST_SUITE("fx/fx") {
     }
   }
 
-  TEST_CASE("rounding (floor vs trunc)") {
+  TEST_CASE("fx: rounding (floor vs trunc)") {
     fx a = fx::from_int(-3);
     fx b = fx::from_ratio(1, 2);
 
@@ -51,7 +51,7 @@ TEST_SUITE("fx/fx") {
     CHECK(div_res == c);
   }
 
-  TEST_CASE("compound operators") {
+  TEST_CASE("fx: compound operators") {
     SUBCASE("+= -= *= /=") {
       fx a = fx::from_int(5);
       fx b = fx::from_int(3);
@@ -75,7 +75,7 @@ TEST_SUITE("fx/fx") {
     }
   }
 
-  TEST_CASE("division") {
+  TEST_CASE("fx: division") {
     SUBCASE(
         "divide by zero clamping (release behavior assumes clamp, aborts in "
         "debug)"
@@ -116,7 +116,7 @@ TEST_SUITE("fx/fx") {
     }
   }
 
-  TEST_CASE("algebra properties") {
+  TEST_CASE("fx: algebra properties") {
     fx a = fx::from_raw(123456);
     fx b = fx::from_raw(-654321);
 
@@ -127,14 +127,14 @@ TEST_SUITE("fx/fx") {
     CHECK(3 * a == a * 3);
   }
 
-  TEST_CASE("ordering") {
+  TEST_CASE("fx: ordering") {
     CHECK(fx::from_int(-5) < fx::from_int(2));
     CHECK(fx::from_int(2) > fx::from_int(-5));
     CHECK(fx::from_int(10) == fx::from_int(10));
     CHECK(fx::from_int(0) >= fx::from_raw(-1));
   }
 
-  TEST_CASE("constexpr static assertions") {
+  TEST_CASE("fx: constexpr static assertions") {
     // tests that constexpr isn't just a label; it actually works in
     // compile-time evaluation
     static_assert((fx::from_int(2) * fx::from_int(3)).trunc_to_int() == 6);
@@ -144,7 +144,7 @@ TEST_SUITE("fx/fx") {
     static_assert(fx::from_ratio(1, 4).raw == (fx::SCALE / 4));
   }
 
-  TEST_CASE("vs double (sanity correctness)") {
+  TEST_CASE("fx: vs double (sanity correctness)") {
     // loose tolerance, catching gross shift/sign errors.
     // not a determinism test. do not tighten tolerance here.
     auto test_pair = [](i32 r1, i32 r2) {
@@ -166,7 +166,7 @@ TEST_SUITE("fx/fx") {
     test_pair(-80000, -80000);
   }
 
-  TEST_CASE("golden hash sequence") {
+  TEST_CASE("fx: golden hash sequence") {
     // ~100k mixed operations folded into one constant. That constant is
     // committed ONCE, and every CI row -- both architectures, both compilers,
     // every preset -- checks this same value, so cross-platform agreement is
@@ -191,7 +191,7 @@ TEST_SUITE("fx/fx") {
     CHECK(hash == 0x6B78D1DC);
   }
 
-  TEST_CASE("free functions") {
+  TEST_CASE("fx: free functions") {
     SUBCASE("abs") {
       CHECK(abs(fx::from_int(-5)) == fx::from_int(5));
       CHECK(abs(fx::from_int(5)) == fx::from_int(5));
@@ -289,7 +289,7 @@ TEST_SUITE("fx/fx") {
     }
   }
 
-  TEST_CASE("saturating arithmetic") {
+  TEST_CASE("fx: saturating arithmetic") {
     // Opt-in and named. These do NOT assert: clamping is the requested
     // behaviour here, not a bug being reported, so both build arms run the
     // same code and the overflow cases are exercised in debug too.
@@ -337,7 +337,7 @@ TEST_SUITE("fx/fx") {
     }
   }
 
-  TEST_CASE("byte representation") {
+  TEST_CASE("fx: byte representation") {
     // The static_asserts in fx.hpp already fail the build if any of this
     // breaks. Restated as a runtime case so ctest names the property that the
     // rollback snapshot and the desync fingerprint both depend on.
@@ -358,7 +358,7 @@ TEST_SUITE("fx/fx") {
    * operator is consteval: if this file compiles, they held. The runtime body
    * exists only so ctest names the group. */
 
-  TEST_CASE("_fx literal: exact against from_ratio") {
+  TEST_CASE("fx: _fx literal: exact against from_ratio") {
     // from_ratio reaches the same value by a different route -- fdiv on a
     // ratio rather than digit accumulation -- so this is a real cross-check.
     // The MULTI-DIGIT fractions are the ones that earn their place: a
@@ -373,7 +373,7 @@ TEST_SUITE("fx/fx") {
     static_assert((0.999999_fx).raw == fx::from_ratio(999999, 1000000).raw);
   }
 
-  TEST_CASE("_fx literal: integer literals") {
+  TEST_CASE("fx: _fx literal: integer literals") {
     // The entire reason for the raw const char* form. A cooked long double
     // operator cannot match an integer literal at all, so 1_fx did not compile.
     static_assert((0_fx).raw     == 0);
@@ -383,7 +383,7 @@ TEST_SUITE("fx/fx") {
     static_assert((1_fx).raw     == fx::from_int(1).raw);
   }
 
-  TEST_CASE("_fx literal: spelling does not change the value") {
+  TEST_CASE("fx: _fx literal: spelling does not change the value") {
     static_assert((1.50_fx).raw  == (1.5_fx).raw);
     static_assert((1.000_fx).raw == (1_fx).raw);
     static_assert((00.5_fx).raw  == (0.5_fx).raw);
@@ -392,7 +392,7 @@ TEST_SUITE("fx/fx") {
     static_assert((0.0_fx).raw   == 0);
   }
 
-  TEST_CASE("_fx literal: digits past FRAC_DIGIT_CAP are dropped") {
+  TEST_CASE("fx: _fx literal: digits past FRAC_DIGIT_CAP are dropped") {
     // Pins that the extra digits are consumed and ignored, not rejected.
     static_assert((0.123456789012_fx).raw == (0.123456789_fx).raw);
 
@@ -406,7 +406,7 @@ TEST_SUITE("fx/fx") {
     static_assert(fx::from_ratio(1, 65536).raw == 1);
   }
 
-  TEST_CASE("_fx literal: the sign is applied AFTER the literal") {
+  TEST_CASE("fx: _fx literal: the sign is applied AFTER the literal") {
     // A literal operator never sees the minus. -0.1_fx is -(0.1_fx), so the
     // MAGNITUDE floors and negation -- which is exact -- happens afterwards.
     static_assert((-0.1_fx).raw == -((0.1_fx).raw));
@@ -421,7 +421,7 @@ TEST_SUITE("fx/fx") {
     static_assert((-0.4_fx).raw != fx::from_ratio(-2, 5).raw);
   }
 
-  TEST_CASE("_fx literal: agrees with arithmetic") {
+  TEST_CASE("fx: _fx literal: agrees with arithmetic") {
     // Ties the literal to the operators rather than testing it in isolation.
     static_assert((0.5_fx * 2).raw        == (1_fx).raw);
     static_assert((2_fx * 0.5_fx).raw     == (1_fx).raw);
@@ -429,7 +429,7 @@ TEST_SUITE("fx/fx") {
     static_assert((1.5_fx - 0.5_fx).raw   == (1_fx).raw);
   }
 
-  TEST_CASE("_fx literal: upper boundary") {
+  TEST_CASE("fx: _fx literal: upper boundary") {
     // MAX_INT << SHIFT is 2147418112 and the fraction is always under 65536,
     // so a literal that passes the integer-part check cannot overflow.
     static_assert((32767_fx).raw     == fx::MAX_INT * fx::SCALE);

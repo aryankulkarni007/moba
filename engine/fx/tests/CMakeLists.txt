@@ -5,8 +5,45 @@ moba_add_test(test_fx
         test_isqrt.cpp
         test_vec2.cpp
         test_shapes.cpp
+        test_angle.cpp
     LIBS
         moba::fx
+)
+
+# Death tests for the degenerate arms in fx/. A plain executable, NOT a
+# moba_add_test: the interesting cases end in abort(), so they cannot share a
+# process with doctest or with each other. See death_fx.cpp.
+add_executable(death_fx death_fx.cpp)
+target_link_libraries(death_fx PRIVATE moba::fx moba::options)
+
+# EXPECT is the STRINGIFIED CONDITION the assert prints, not a paraphrase.
+# Change the condition in the header and this must change with it -- that
+# coupling is what stops the test passing on some unrelated abort.
+moba_add_death_test(death_fx_atan2_of_the_origin
+    EXE    death_fx
+    ARG    atan2_origin
+    EXPECT "x.raw != 0 || y.raw != 0"
+)
+
+moba_add_death_test(death_fx_normalise_of_the_zero_vector
+    EXE    death_fx
+    ARG    normalise_zero
+    EXPECT "v != vec2::ZERO"
+)
+
+# The controls, and the first is a real regression: the atan2 assert was once
+# written with && instead of ||, which rejects every axis-aligned aim. Pointing
+# straight east must not abort.
+moba_add_death_test(death_fx_atan2_on_an_axis_is_legal
+    EXE          death_fx
+    ARG          atan2_axis
+    NEVER_ABORTS
+)
+
+moba_add_death_test(death_fx_normalise_of_a_real_vector_is_legal
+    EXE          death_fx
+    ARG          normalise_real
+    NEVER_ABORTS
 )
 
 # The _fx literal is consteval, so every rejection it performs is a COMPILE

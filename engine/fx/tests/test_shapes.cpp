@@ -474,4 +474,127 @@ TEST_SUITE("fx/shapes") {
     static_assert(std::is_standard_layout_v<capsule>);
     CHECK(sizeof(capsule) == 20);
   }
+
+  TEST_CASE("shapes: commuted overloads agree with the forward spellings") {
+    // They delegate, so this cannot fail by arithmetic drift -- it fails if
+    // someone reimplements one of them, which is the whole risk being guarded.
+    u32 rng      = 0x0BADF00D;
+    u64 checked  = 0;
+    u64 failures = 0;
+    auto nraw    = [&rng]() -> i32 {
+      rng = rng * 1664525u + 1013904223u;
+      return static_cast<i32>(rng >> 9) - (1 << 22);
+    };
+    auto nrad = [&rng]() -> fx {
+      rng = rng * 1664525u + 1013904223u;
+      return fx::from_raw(static_cast<i32>(rng >> 12));
+    };
+    for (i32 i = 0; i < 20000; ++i) {
+      const vec2   c{ fx::from_raw(nraw()), fx::from_raw(nraw()) };
+      const circle ci{ c, nrad() };
+      const fx     x1 = fx::from_raw(nraw()), x2 = fx::from_raw(nraw());
+      const fx     y1 = fx::from_raw(nraw()), y2 = fx::from_raw(nraw());
+      const aabb   box{ vec2{ min(x1, x2), min(y1, y2) },
+                        vec2{ max(x1, x2), max(y1, y2) } };
+      const segment seg{ vec2{ x1, y1 }, vec2{ x2, y2 } };
+      const capsule cap{ seg, nrad() };
+      ++checked;
+      if (overlaps(ci, box) != overlaps(box, ci)) ++failures;
+      if (overlaps(ci, cap) != overlaps(cap, ci)) ++failures;
+    }
+    CHECK(checked == 20000);
+    CHECK(failures == 0);
+  }
+
+  TEST_CASE("shapes: contains circle") {
+    const circle c{ vec2{ fx::from_int(0), fx::from_int(0) }, fx::from_int(5) };
+
+    CHECK(contains(c, vec2{ fx::from_int(0), fx::from_int(0) }));
+    CHECK(contains(c, vec2{ fx::from_int(3), fx::from_int(4) }));   // exactly on the rim
+    CHECK(contains(c, vec2{ fx::from_int(5), fx::from_int(0) }));   // exactly on the rim
+    CHECK_FALSE(contains(c, vec2{ fx::from_int(5), fx::from_raw(1) }));
+
+    // TOUCHING IS A HIT, and the rim cases above are what pin it for this
+    // predicate specifically -- one character, and it has to be the same
+    // character in every predicate in the file.
+
+    // Agrees with the distance comparison written out by hand.
+    u32 rng      = 0xFEEDBEEF;
+    u64 checked  = 0;
+    u64 failures = 0;
+    auto nraw    = [&rng]() -> i32 {
+      rng = rng * 1664525u + 1013904223u;
+      return static_cast<i32>(rng >> 9) - (1 << 22);
+    };
+    for (i32 i = 0; i < 20000; ++i) {
+      rng = rng * 1664525u + 1013904223u;
+      const circle ci{ vec2{ fx::from_raw(nraw()), fx::from_raw(nraw()) },
+                       fx::from_raw(static_cast<i32>(rng >> 12)) };
+      const vec2   p{ fx::from_raw(nraw()), fx::from_raw(nraw()) };
+      ++checked;
+      if (contains(ci, p) != (distance_sq(ci.c, p) <= sq(ci.r))) ++failures;
+    }
+    CHECK(checked == 20000);
+    CHECK(failures == 0);
+  }
+
+  TEST_CASE("shapes: golden hash sequence") {
+    // Every public predicate and every distance function, folded into one
+    // committed constant. shapes.hpp is the phase-2 hitbox surface, so this is
+    // the one that will matter most once the sim depends on it.
+    u32  hash = 0x811c9dc5;
+    auto fnv  = [&hash](i32 raw) {
+      hash ^= static_cast<u32>(raw);
+      hash *= 0x01000193;
+    };
+    auto fnv64 = [&fnv](i64 raw) {
+      fnv(static_cast<i32>(static_cast<u64>(raw) & 0xffffffffu));
+      fnv(static_cast<i32>(static_cast<u64>(raw) >> 32));
+    };
+    // One generator, seeded differently from the vec2 hash so the two files
+    // exercise different inputs. Every draw below shares it, so the ORDER of
+    // the draws is part of the constant -- reordering them changes the hash
+    // without changing any behaviour, which is why they are not shuffled.
+    u32  rng  = 0x9E3779B9;
+    auto nraw = [&rng]() -> i32 {
+      rng = rng * 1664525u + 1013904223u;
+      return static_cast<i32>(rng >> 9) - (1 << 22);
+    };
+    auto nv = [&nraw]() { return vec2{ fx::from_raw(nraw()), fx::from_raw(nraw()) }; };
+    auto nrad = [&rng]() -> fx {
+      rng = rng * 1664525u + 1013904223u;
+      return fx::from_raw(static_cast<i32>(rng >> 12));
+    };
+    auto nbox = [&nraw]() {
+      const fx x1 = fx::from_raw(nraw()), x2 = fx::from_raw(nraw());
+      const fx y1 = fx::from_raw(nraw()), y2 = fx::from_raw(nraw());
+      return aabb{ vec2{ min(x1, x2), min(y1, y2) },
+                   vec2{ max(x1, x2), max(y1, y2) } };
+    };
+
+    for (i32 i = 0; i < 20000; ++i) {
+      const vec2    p = nv(), q = nv(), r = nv(), t = nv();
+      const circle  c1{ p, nrad() }, c2{ q, nrad() };
+      const aabb    box = nbox(), box2 = nbox();
+      const segment s1{ p, q }, s2{ r, t };
+      const capsule k1{ s1, nrad() }, k2{ s2, nrad() };
+
+      fnv(overlaps(c1, c2) ? 1 : 0);
+      fnv(overlaps(c1, box) ? 1 : 0);
+      fnv(overlaps(box, c1) ? 1 : 0);
+      fnv(overlaps(c1, k1) ? 1 : 0);
+      fnv(overlaps(k1, c1) ? 1 : 0);
+      fnv(overlaps(k1, k2) ? 1 : 0);
+      fnv(overlaps(box, box2) ? 1 : 0);
+      fnv(contains(box, p) ? 1 : 0);
+      fnv(contains(c1, q) ? 1 : 0);
+      fnv(segments_intersect(s1, s2) ? 1 : 0);
+      fnv64(dist_sq_point_aabb(p, box).raw);
+      fnv64(dist_sq_point_segment(p, s2).raw);
+      fnv64(dist_sq_segment_segment(s1, s2).raw);
+      fnv64(sq(c1.r).raw);
+    }
+
+    CHECK(hash == 0x745104BE);
+  }
 }

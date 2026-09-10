@@ -351,4 +351,103 @@ TEST_SUITE("fx/vec2") {
     static_assert(sizeof(vec2) == 2 * sizeof(fx));
     CHECK(sizeof(vec2) == 8);
   }
+
+  TEST_CASE("vec2: scaling commutes") {
+    // `2_fx * v` and `v * 2_fx` must be the same value, not merely the same
+    // idea. The commuted form delegates for exactly this reason.
+    u32 rng = 0x2468ACE0;
+    u64 checked = 0;
+    u64 failures = 0;
+    for (i32 i = 0; i < 20000; ++i) {
+      rng          = rng * 1664525u + 1013904223u;
+      const fx   s = fx::from_raw(static_cast<i32>(rng >> 12));
+      rng          = rng * 1664525u + 1013904223u;
+      const i32  a = static_cast<i32>(rng >> 14) - (1 << 17);
+      rng          = rng * 1664525u + 1013904223u;
+      const i32  b = static_cast<i32>(rng >> 14) - (1 << 17);
+      const vec2 v{ fx::from_raw(a), fx::from_raw(b) };
+      ++checked;
+      if (!(s * v == v * s)) ++failures;
+    }
+    CHECK(checked == 20000);
+    CHECK(failures == 0);
+  }
+
+  TEST_CASE("vec2: perp is the anticlockwise quarter turn") {
+    // The DIRECTION is fixed by an identity rather than recorded by an
+    // example. `cross(a, b)` is positive when b lies anticlockwise of a, and
+    // perp(v) is a quarter turn of the same length, so the cross product is
+    // exactly length_sq(v) -- positive for every non-zero v. The clockwise
+    // version would give -length_sq(v), and this case is what would fail.
+    u32 rng      = 0x13579BDF;
+    u64 checked  = 0;
+    u64 failures = 0;
+    for (i32 i = 0; i < 20000; ++i) {
+      rng           = rng * 1664525u + 1013904223u;
+      const i32 x   = static_cast<i32>(rng >> 10) - (1 << 21);
+      rng           = rng * 1664525u + 1013904223u;
+      const i32 y   = static_cast<i32>(rng >> 10) - (1 << 21);
+      const vec2 v{ fx::from_raw(x), fx::from_raw(y) };
+      const vec2 p = perp(v);
+      ++checked;
+      const bool ok = cross(v, p) == length_sq(v)      // anticlockwise
+                      && dot(v, p) == fx64::ZERO       // a right angle
+                      && length_sq(p) == length_sq(v)  // same length
+                      && perp(p) == -v;                // twice is a half turn
+      if (!ok) ++failures;
+    }
+    CHECK(checked == 20000);
+    CHECK(failures == 0);
+
+    // The worked example, so a failure above is readable.
+    const vec2 east{ fx::from_int(1), fx::from_int(0) };
+    CHECK(perp(east) == vec2{ fx::from_int(0), fx::from_int(1) });
+  }
+
+  TEST_CASE("vec2: golden hash sequence") {
+    // Same construction as the fx, fx64 and angle hashes: ~50k mixed
+    // operations folded into one committed constant that every CI row checks.
+    // Covers dot, cross, length_sq, distance_sq, length, normalise, perp, the
+    // commuted scale and the arithmetic operators -- so a change to any of
+    // them moves it.
+    u32  hash = 0x811c9dc5;
+    auto fnv  = [&hash](i32 raw) {
+      hash ^= static_cast<u32>(raw);
+      hash *= 0x01000193;
+    };
+    auto fnv64 = [&fnv](i64 raw) {
+      fnv(static_cast<i32>(static_cast<u64>(raw) & 0xffffffffu));
+      fnv(static_cast<i32>(static_cast<u64>(raw) >> 32));
+    };
+    u32  rng  = 0x12345678;
+    auto nraw = [&rng]() -> i32 {
+      rng = rng * 1664525u + 1013904223u;
+      return static_cast<i32>(rng >> 9) - (1 << 22);  // +/- 64 in fx value
+    };
+    auto nv = [&nraw]() { return vec2{ fx::from_raw(nraw()), fx::from_raw(nraw()) }; };
+
+    for (i32 i = 0; i < 50000; ++i) {
+      const vec2 a = nv(), b = nv();
+      fnv64(dot(a, b).raw);
+      fnv64(cross(a, b).raw);
+      fnv64(length_sq(a).raw);
+      fnv64(distance_sq(a, b).raw);
+      fnv((a + b).x.raw);
+      fnv((a - b).y.raw);
+      const vec2 p = perp(a);
+      fnv(p.x.raw);
+      fnv(p.y.raw);
+      fnv(length(a).raw);
+      const vec2 s = fx::from_ratio(1, 3) * a;
+      fnv(s.x.raw);
+      fnv(s.y.raw);
+      if (i % 7 == 0 && a != vec2::ZERO) {
+        const vec2 n = normalise(a);
+        fnv(n.x.raw);
+        fnv(n.y.raw);
+      }
+    }
+
+    CHECK(hash == 0x32AE149C);
+  }
 }

@@ -2,6 +2,14 @@
 
 Codename. A deterministic 5v5 arena simulation in C++20.
 
+A MOBA with fighting-game mechanics: closer to League than Dota, closer to
+Tekken than Street Fighter.
+
+The design is in [`DESIGN.md`](DESIGN.md) -- what the game is, and why each
+decision constrains the engine. Read it before making a technical choice that
+depends on a gameplay fact. If it does not answer the question, the answer is
+unknown rather than inferable.
+
 The hard requirement driving every technical decision: **two machines must
 produce bit-identical simulation results.** Without that, rollback netcode and
 replays are impossible. Hence fixed-point maths instead of floats, a pure
@@ -72,20 +80,22 @@ Phase 0.
 | `core/types`, `core/assert`, `core/strong_id`  | written, tested                                                                           |
 | `fx`, `fx64`                                   | written, tested -- including the four-path rounding agreement and a golden hash per width |
 | `fx/isqrt`, `fx/vec2`, `fx/shapes`             | written, tested. `shapes.hpp` is the phase-2 hitbox surface                               |
-| `fx/angle`                                     | spec only. A side branch rather than a dependency -- deferred until aim handling wants it |
+| `fx/angle`                                     | written, tested. BAM16 with a consteval CORDIC sine table -- sin/cos within 0.81 fx LSB, atan2 within 1 BAM unit         |
 | `core/result`                                  | spec only, deliberately. First caller is phase 2                                          |
 
-Open work is tracked two ways: `TODO.md` for anything spanning more than one
-file, and `TODO:` comments in the headers for everything else --
+Work is tracked three ways: `TODO.md` for anything spanning more than one file,
+`DONE.md` for closed items -- condensed to the measurements and decisions, so
+nothing gets re-litigated -- and `TODO:` comments in the headers for
+everything else --
 `grep -rn "TODO:" engine`. Each comment carries a tag saying what kind of
 decision it is: `[missing]`, `[decide]`, `[sequencing]`, `[phase 1]`.
 
-The determinism claim rests on the golden hashes in `test_fx.cpp` and
-`test_fx64.cpp`. Each folds ~100k mixed operations into one committed
-constant, and every CI row -- x86-64 and AArch64, Clang and GCC, every preset
--- checks that same constant. Two rows disagreeing is a red build.
+The determinism claim rests on the golden hashes in `test_fx.cpp`,
+`test_fx64.cpp` and `test_angle.cpp`. Each folds ~100k mixed operations into
+one committed constant, and every CI row -- x86-64 and AArch64, Clang and GCC,
+every preset -- checks that same constant. Two rows disagreeing is a red build.
 
-Three rules the suite enforces, each learned the hard way:
+Four rules the suite enforces, each learned the hard way:
 
 - **A header with no test is never compiled.** The libraries are `INTERFACE`,
   and `FILE_SET HEADERS` is IDE metadata, not a build step. Every header needs
@@ -96,3 +106,8 @@ Three rules the suite enforces, each learned the hard way:
 - **No commas in `TEST_CASE` names.** doctest's discovery emits an empty
   `LABELS` for those, so the case runs under a bare `ctest` but `ctest -L`
   silently skips it.
+- **`TEST_CASE` names must be unique across the whole test binary**, not just
+  within a `TEST_SUITE`. ctest registers one entry per case under the case name
+  ALONE, so two suites sharing a name collapse into a single ambiguous entry
+  that runs both. Hence the `fx64:` and `angle:` prefixes -- the files sharing
+  the `test_fx` binary each prefix their cases.

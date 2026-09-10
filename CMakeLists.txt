@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(moba VERSION 0.1.0 DESCRIPTION "moba - deterministic 1v1 arena simulation" LANGUAGES CXX)
+project(
+    moba
+    VERSION 0.1.0
+    DESCRIPTION "moba - deterministic 1v1 arena simulation"
+    LANGUAGES CXX
+)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 

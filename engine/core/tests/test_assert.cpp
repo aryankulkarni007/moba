@@ -23,7 +23,7 @@ constexpr int checked_multiply(int x) {
 }  // namespace
 
 TEST_SUITE("core/assert") {
-  TEST_CASE("macros are defined") {
+  TEST_CASE("assert: macros are defined") {
 #if !defined(MOBA_ASSERT) || !defined(MOBA_ASSERT_MSG)
     FAIL("MOBA_ASSERT or MOBA_ASSERT_MSG is not defined");
 #else
@@ -31,7 +31,7 @@ TEST_SUITE("core/assert") {
 #endif
   }
 
-  TEST_CASE("true conditions do not abort") {
+  TEST_CASE("assert: true conditions do not abort") {
     MOBA_ASSERT(true);
     MOBA_ASSERT_MSG(1 + 1 == 2, "math is broken");
     // if execution reaches here,
@@ -39,7 +39,7 @@ TEST_SUITE("core/assert") {
     CHECK(true);
   }
 
-  TEST_CASE("statement safe (dangling else)") {
+  TEST_CASE("assert: statement safe (dangling else)") {
     int  x            = 1;
     bool reached_else = false;
 
@@ -53,7 +53,7 @@ TEST_SUITE("core/assert") {
   }
 
   TEST_CASE(
-      "condition evaluated exactly once (or zero in "
+      "assert: condition evaluated exactly once (or zero in "
       "NDEBUG)"
   ) {
     g_eval_counter = 0;
@@ -75,14 +75,14 @@ TEST_SUITE("core/assert") {
 #endif
   }
 
-  TEST_CASE("usable in constexpr contexts") {
+  TEST_CASE("assert: usable in constexpr contexts") {
     constexpr int result = checked_multiply(1);
     CHECK(result == 2);
 
     static_assert(checked_multiply(10) == 20);
   }
 
-  TEST_CASE("compiler warning suppressions") {
+  TEST_CASE("assert: compiler warning suppressions") {
     // proves note 1 from assert.hpp:
     // local variables used only in asserts should not trigger -Wunused-variable
     int only_used_in_assert = 42;

@@ -42,7 +42,7 @@ struct sweep {
 }  // namespace
 
 TEST_SUITE("fx/isqrt") {
-  TEST_CASE("postcondition") {
+  TEST_CASE("isqrt: postcondition") {
     // r*r <= n < (r+1)*(r+1) is the definition of the integer square root
     // The intervals [k^2, (k+1)^2) tile the non-negative integers with no gap
     // and no overlap, so every n falls in exactly one and its k is
@@ -118,7 +118,7 @@ TEST_SUITE("fx/isqrt") {
     }
   }
 
-  TEST_CASE("perfect squares are exact") {
+  TEST_CASE("isqrt: perfect squares are exact") {
     // The case a float implementation gets wrong, and the one that makes
     // length() of an axis-aligned vector come out clean rather than one ULP
     // short. Swept up to the largest k whose square still fits u64.
@@ -135,7 +135,7 @@ TEST_SUITE("fx/isqrt") {
     }
   }
 
-  TEST_CASE("named boundaries") {
+  TEST_CASE("isqrt: named boundaries") {
     // constexpr, so these hold at compile time or the file does not build.
     static_assert(isqrt(0) == 0);
     static_assert(isqrt(1) == 1);
@@ -156,7 +156,7 @@ TEST_SUITE("fx/isqrt") {
     CHECK(isqrt(0xFFFFFFFFFFFFFFFFULL) > static_cast<u32>(I32_MAX));
   }
 
-  TEST_CASE("is monotonic non-decreasing") {
+  TEST_CASE("isqrt: is monotonic non-decreasing") {
     // Cheap, and it catches a whole class of bugs the postcondition sweep
     // could only catch by landing on the exact input: a start value that is
     // occasionally wrong shows up as a dip.
@@ -168,7 +168,7 @@ TEST_SUITE("fx/isqrt") {
     }
   }
 
-  TEST_CASE("a double-based implementation is wrong here") {
+  TEST_CASE("isqrt: a double-based implementation is wrong here") {
     // not a comparison against a reference - a demonstration of why there is
     // no floating-point reference to compare against.
     // This documents the trap
@@ -192,7 +192,7 @@ TEST_SUITE("fx/isqrt") {
 }
 
 TEST_SUITE("fx/sqrt") {
-  TEST_CASE("known values") {
+  TEST_CASE("isqrt: known values") {
     CHECK(sqrt(fx::from_int(4)) == fx::from_int(2));
     CHECK(sqrt(fx::from_int(169)) == fx::from_int(13));
     CHECK(sqrt(fx::from_int(100)) == fx::from_int(10));
@@ -210,7 +210,7 @@ TEST_SUITE("fx/sqrt") {
     CHECK(sqrt(fx::from_int(2)).raw == 92681);  // 1.41420... , floor of 1.41421
   }
 
-  TEST_CASE("the fixed-point postcondition") {
+  TEST_CASE("isqrt: the fixed-point postcondition") {
     // The same interval property as isqrt, restated in fx terms: the result
     // squared must not exceed the input, and one ULP more must exceed it.
     //
@@ -232,7 +232,7 @@ TEST_SUITE("fx/sqrt") {
     CHECK(failures == 0);
   }
 
-  TEST_CASE("Q32.32 in and Q16.16 out") {
+  TEST_CASE("isqrt: Q32.32 in and Q16.16 out") {
     // The scaling identity the whole header is built on, checked in both
     // spellings. A square root halves the scale factor, so a Q32.32 raw is
     // exactly what produces a Q16.16 raw - which is why vec2::length will
@@ -257,7 +257,7 @@ TEST_SUITE("fx/sqrt") {
     CHECK(fx64::widen(v).raw == static_cast<i64>(v.raw) << 16);
   }
 
-  TEST_CASE("zero and negative") {
+  TEST_CASE("isqrt: zero and negative") {
     CHECK(sqrt(fx::ZERO) == fx::ZERO);
     CHECK(sqrt(fx::EPSILON).raw == 256);  // sqrt(2^-16) is 2^-8, raw 2^8
 
@@ -271,7 +271,7 @@ TEST_SUITE("fx/sqrt") {
 #endif
   }
 
-  TEST_CASE("is monotonic and never exceeds i32") {
+  TEST_CASE("isqrt: is monotonic and never exceeds i32") {
     // sqrt(fx) is total on non-negative input: the worst case is fx::MAX
     // widened, whose root is 11863283 - 181x inside i32. That is why the
     // narrowing cast in sqrt() needs no range check
@@ -285,7 +285,7 @@ TEST_SUITE("fx/sqrt") {
     CHECK(sqrt(fx::MAX).raw < I32_MAX);
   }
 
-  TEST_CASE("constexpr") {
+  TEST_CASE("isqrt: constexpr") {
     // proves constexpr is not just a label
     // named constants should cost nothing at runtime
     static_assert(sqrt(fx::from_int(4)).raw == fx::from_int(2).raw);

@@ -248,15 +248,27 @@ dist_sq_segment_segment(segment s, segment t) noexcept {
   return box.min.x <= p.x && p.x <= box.max.x && box.min.y <= p.y
          && p.y <= box.max.y;
 }
+
+/// The commuted spellings. They DELEGATE rather than reimplement, and that is
+/// the whole point: two orders computing the same thing separately could
+/// disagree, and a hit that lands in one and misses in the other is exactly
+/// what the touching-is-a-hit rule at the top of this file exists to prevent.
+[[nodiscard]] constexpr bool overlaps(aabb a, circle b) noexcept {
+  return overlaps(b, a);
+}
+[[nodiscard]] constexpr bool overlaps(capsule a, circle b) noexcept {
+  return overlaps(b, a);
+}
+
+/// Completes the point-probe set alongside contains(aabb, vec2). A point is a
+/// zero-radius circle under `<=`, as the header note says, so this needs no
+/// special case -- and delegating means the touching rule has one definition
+/// rather than two that could drift apart.
+[[nodiscard]] constexpr bool contains(circle c, vec2 p) noexcept {
+  return overlaps(c, circle{ p, 0_fx });
+}
 }  // namespace moba
 
-// TODO: [missing] overlaps(capsule, circle) and overlaps(aabb, circle), the
-//       commuted spellings. One line each, delegating, so the two orders
-//       cannot disagree.
-//
-// TODO: [missing] contains(circle, vec2). One line, and it completes the point
-//       probe set alongside contains(aabb, vec2).
-//
 // TODO: [decide] raycast(segment, circle) is the only thing here that would
 //       need a square root, and it returns an optional, which means either
 //       <optional> in a sim header or core/result.hpp, still deferred.

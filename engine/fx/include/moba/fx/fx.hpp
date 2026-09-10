@@ -135,8 +135,8 @@ struct [[nodiscard]] fx {
   i32 raw = 0;
 
   /* CONSTRUCTION */
-  // User-declared, so fx is not an aggregate and `fx a{ 4 }` does not compile.
-  // Without it the shortest spelling means raw 4, i.e. 4/65536 -- the exact
+  // user-declared, so fx is not an aggregate and `fx a{ 4 }` does not compile.
+  // without it the shortest spelling means raw 4, i.e. 4/65536 -- the exact
   // confusion from_raw and from_int are named to prevent.
   constexpr fx() noexcept = default;
 
@@ -206,7 +206,7 @@ struct [[nodiscard]] fx {
     return from_raw(-raw);
   }
 
-  // Still mul_wide() + narrow() open-coded, and it has to be: operator* is a
+  // still mul_wide() + narrow() open-coded, and it has to be: operator* is a
   // member of fx, and fx64 does not exist yet in the include graph. The part
   // that could drift -- shift direction, width, rounding -- lives once, in
   // detail::unscale_fx. What is left duplicated is the range check and the
@@ -219,7 +219,7 @@ struct [[nodiscard]] fx {
     return from_raw(static_cast<i32>(shifted));
   }
 
-  // Division by zero is the policy's one exception: no wrapping answer exists,
+  // division by zero is the policy's one exception: no wrapping answer exists,
   // so it clamps on the numerator's sign. The narrowing below is NOT an
   // exception and wraps like everything else.
   constexpr fx operator/(fx o) const noexcept {
@@ -293,7 +293,7 @@ inline constexpr fx fx::MAX     = fx::from_raw(I32_MAX);
 /// the spelling should too
 [[nodiscard]] constexpr fx operator*(i32 n, fx v) noexcept { return v * n; }
 
-// The game state gets copied and fingerprinted as a plain block of bytes: to
+// the game state gets copied and fingerprinted as a plain block of bytes: to
 // rewind a tick, and to check the two players' machines still agree. That only
 // works if an fx *is* its four bytes and nothing more. If the type had spare
 // bits the compiler could leave holding junk, two fx that compare equal could

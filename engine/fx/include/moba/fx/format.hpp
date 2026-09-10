@@ -46,7 +46,6 @@
 // applies to every header in the project; strong_id.hpp went unchecked for
 // exactly this reason until test_strong_id.cpp was written.
 
-// TODO: [missing] angle formatter, once angle.hpp exists.
 //
 // TODO: [decide] shapes.hpp has no formatters. circle/segment/aabb/capsule are
 //       all trivial compositions of vec2 and fx, so they are cheap to add;
@@ -55,6 +54,7 @@
 
 #include <format>
 #include <moba/fx/fx.hpp>
+#include <moba/fx/angle.hpp>
 #include <moba/fx/fx64.hpp>
 #include <moba/fx/vec2.hpp>
 #include <ostream>
@@ -68,6 +68,12 @@ namespace moba {
 /// approximate above |raw| 2^53: i64 raw exceeds a double's 53-bit mantissa
 [[nodiscard]] constexpr double to_double_lossy(fx64 v) noexcept {
   return static_cast<double>(v.raw) / static_cast<double>(fx64::SCALE);
+}
+
+/// exact: raw is at most 65535, raw * 360 at most 23.6M -- both well inside a
+/// double's mantissa -- and dividing by 65536 only shifts the exponent.
+[[nodiscard]] constexpr double to_degrees(angle a) noexcept {
+  return static_cast<double>(a.raw) * 360.0 / static_cast<double>(angle::SCALE);
 }
 }  // namespace moba
 
@@ -86,6 +92,18 @@ struct std::formatter<moba::fx64> : std::formatter<double> {
   auto format(moba::fx64 v, std::format_context &ctx) const {
     auto out = std::formatter<double>::format(moba::to_double_lossy(v), ctx);
     return std::format_to(out, " fx64({})", v.raw);
+  }
+};
+
+// Degrees, because a bare 49152 does not read as three quarters of a turn.
+// The raw follows in parentheses exactly as fx's does, since the raw is what a
+// desync report needs to be comparable between machines -- the degrees are for
+// the human and the raw is the evidence.
+template <>
+struct std::formatter<moba::angle> : std::formatter<double> {
+  auto format(moba::angle a, std::format_context &ctx) const {
+    auto out = std::formatter<double>::format(moba::to_degrees(a), ctx);
+    return std::format_to(out, " deg angle({})", a.raw);
   }
 };
 
@@ -125,5 +143,9 @@ inline std::ostream &operator<<(std::ostream &os, fx64 v) {
 
 inline std::ostream &operator<<(std::ostream &os, vec2 v) {
   return os << std::format("{}", v);
+}
+
+inline std::ostream &operator<<(std::ostream &os, angle a) {
+  return os << std::format("{}", a);
 }
 }  // namespace moba
